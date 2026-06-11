@@ -27,6 +27,10 @@
 		C41E70602FDB3DD30005E429 /* Dicho.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dicho.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C41E706F2FDB3DD50005E429 /* DichoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DichoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C41E70792FDB3DD50005E429 /* DichoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DichoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C41E708D2FDB3E7A0005E429 /* ARCHITECTURE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ARCHITECTURE.md; sourceTree = "<group>"; };
+		C41E708E2FDB3E7A0005E429 /* PRODUCT_SPEC.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PRODUCT_SPEC.md; sourceTree = "<group>"; };
+		C41E708F2FDB3E7A0005E429 /* TASKS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TASKS.md; sourceTree = "<group>"; };
+		C41E70902FDB3E870005E429 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -75,10 +79,12 @@
 		C41E70572FDB3DD30005E429 = {
 			isa = PBXGroup;
 			children = (
+				C41E708C2FDB3DFA0005E429 /* Documentation */,
 				C41E70622FDB3DD30005E429 /* Dicho */,
 				C41E70722FDB3DD50005E429 /* DichoTests */,
 				C41E707C2FDB3DD50005E429 /* DichoUITests */,
 				C41E70612FDB3DD30005E429 /* Products */,
+				C41E70902FDB3E870005E429 /* CLAUDE.md */,
 			);
 			sourceTree = "<group>";
 		};
@@ -90,6 +96,16 @@
 				C41E70792FDB3DD50005E429 /* DichoUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		C41E708C2FDB3DFA0005E429 /* Documentation */ = {
+			isa = PBXGroup;
+			children = (
+				C41E708D2FDB3E7A0005E429 /* ARCHITECTURE.md */,
+				C41E708E2FDB3E7A0005E429 /* PRODUCT_SPEC.md */,
+				C41E708F2FDB3E7A0005E429 /* TASKS.md */,
+			);
+			path = Documentation;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
