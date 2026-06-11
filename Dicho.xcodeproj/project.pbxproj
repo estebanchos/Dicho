@@ -31,6 +31,8 @@
 		C41E708E2FDB3E7A0005E429 /* PRODUCT_SPEC.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PRODUCT_SPEC.md; sourceTree = "<group>"; };
 		C41E708F2FDB3E7A0005E429 /* TASKS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TASKS.md; sourceTree = "<group>"; };
 		C41E70902FDB3E870005E429 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
+		C41E70AB2FDB4E8E0005E429 /* JOURNAL.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = JOURNAL.md; sourceTree = "<group>"; };
+		C41E70AC2FDB4FE90005E429 /* RESTART_AGENT.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = RESTART_AGENT.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -101,9 +103,11 @@
 		C41E708C2FDB3DFA0005E429 /* Documentation */ = {
 			isa = PBXGroup;
 			children = (
+				C41E70AC2FDB4FE90005E429 /* RESTART_AGENT.md */,
 				C41E708D2FDB3E7A0005E429 /* ARCHITECTURE.md */,
 				C41E708E2FDB3E7A0005E429 /* PRODUCT_SPEC.md */,
 				C41E708F2FDB3E7A0005E429 /* TASKS.md */,
+				C41E70AB2FDB4E8E0005E429 /* JOURNAL.md */,
 			);
 			path = Documentation;
 			sourceTree = "<group>";
