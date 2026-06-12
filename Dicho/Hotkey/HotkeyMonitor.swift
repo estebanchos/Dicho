@@ -1,15 +1,6 @@
 import ApplicationServices
 import CoreGraphics
-import Darwin
 import Foundation
-
-// Converts Mach absolute time (CGEventTimestamp) to seconds.
-// Computed once at load time; safe to read from any thread.
-private let machToSeconds: Double = {
-    var info = mach_timebase_info_data_t()
-    mach_timebase_info(&info)
-    return Double(info.numer) / Double(info.denom) / 1_000_000_000
-}()
 
 /// Virtual key code for the Escape key (Carbon kVK_Escape = 53).
 private let kVKEscape: CGKeyCode = 53
@@ -32,14 +23,16 @@ private func tapEventCallback(
 
 /// Production implementation of `HotkeyMonitoring`.
 ///
-/// Installs a listen-only `CGEventTap` on a dedicated background `CFRunLoop` thread.
-/// Feeds raw events into a `TapClassifier` and yields `HotkeyEvent` values on the
-/// `events` stream. Automatically re-enables the tap on `tapDisabledByTimeout`.
+/// Installs a listen-only `CGEventTap` sourced into the **main run loop**, which is
+/// already running (NSApplication's event loop). Per Apple's documentation, the
+/// callback is "invoked from the run loop to which the event tap is added as a source"
+/// — using the main run loop guarantees continuous delivery without managing a
+/// separate thread's lifecycle.
 ///
-/// - Note: `@unchecked Sendable` — mutable state is accessed exclusively from
-///   the dedicated run loop thread (`classifier`, `ctrlIsDown`) or written once
-///   before callbacks begin (`eventTap`, `tapRunLoop`). Thread ownership is
-///   documented per property.
+/// - Note: `@unchecked Sendable` — `classifier` and `ctrlIsDown` are mutated
+///   exclusively from the CGEventTap callback, which is always invoked on the main
+///   run loop thread. `eventTap` is written once on the main thread in `start()`
+///   before callbacks begin.
 final class HotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
 
     // MARK: - HotkeyMonitoring
@@ -67,30 +60,18 @@ final class HotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
             throw HotkeyMonitorError.tapCreationFailed
         }
 
-        // Written on caller thread before the run loop thread starts; all subsequent
-        // reads happen only after CFRunLoopRun() begins (guaranteed happens-before).
         eventTap = tap
 
-        Thread.detachNewThread { [tap, weak self] in
-            let rl = CFRunLoopGetCurrent()!
-            // tapRunLoop: assigned from background thread; caller reads it only in stop(),
-            // which follows the full activation flow — benign race acknowledged.
-            self?.tapRunLoop = rl
-            let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
-            CFRunLoopAddSource(rl, source, .commonModes)
-            CFRunLoopRun()
-        }
+        // Add the tap source to the main run loop, which is already running.
+        // Apple docs: "invoke from the run loop to which the event tap is added as a source."
+        let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
     }
 
     func stop() {
         if let tap = eventTap {
-            // Disabling the tap synchronously prevents any new callbacks from firing.
             CGEvent.tapEnable(tap: tap, enable: false)
             eventTap = nil
-        }
-        if let rl = tapRunLoop {
-            CFRunLoopStop(rl)
-            tapRunLoop = nil
         }
         continuation.finish()
     }
@@ -100,13 +81,11 @@ final class HotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     private let stream: AsyncStream<HotkeyEvent>
     private let continuation: AsyncStream<HotkeyEvent>.Continuation
 
-    // Written once in start() before callbacks begin; read in handleRaw (tap thread) and stop().
+    // Written once in start() on the main thread; read in handleRaw (main run loop callback).
     nonisolated(unsafe) private var eventTap: CFMachPort?
-    // Set from the run loop thread shortly after start; read in stop() for cleanup.
-    nonisolated(unsafe) private var tapRunLoop: CFRunLoop?
-    // Mutated and read exclusively on the CGEventTap run loop thread.
+    // Mutated and read exclusively from the CGEventTap callback on the main run loop.
     nonisolated(unsafe) private var classifier = TapClassifier()
-    // Tracks current Ctrl key state; read and written exclusively on the tap thread.
+    // Tracks Ctrl key state; mutated and read exclusively from the tap callback.
     nonisolated(unsafe) private var ctrlIsDown = false
 
     init() {
@@ -125,11 +104,11 @@ final class HotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
             let hasCtrl = event.flags.contains(.maskControl)
             if hasCtrl, !ctrlIsDown {
                 ctrlIsDown = true
-                let t = Double(event.timestamp) * machToSeconds
+                let t = Double(event.timestamp) / 1_000_000_000
                 emit(classifier.process(.ctrlDown(at: t)))
             } else if !hasCtrl, ctrlIsDown {
                 ctrlIsDown = false
-                let t = Double(event.timestamp) * machToSeconds
+                let t = Double(event.timestamp) / 1_000_000_000
                 emit(classifier.process(.ctrlUp(at: t)))
             }
 
