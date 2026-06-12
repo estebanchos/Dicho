@@ -1,30 +1,33 @@
 import AppKit
+import AVFoundation
 
-/// Application delegate responsible for the menu-bar status item and top-level
-/// app lifecycle. Expanded in later milestones to wire the full pipeline.
+/// Application delegate. Owns the status item and the full dictation pipeline.
+/// Assembled here so `DictationCoordinator` and all production collaborators share
+/// the same lifetime as the process.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+
     private var statusItem: NSStatusItem?
 
-#if DEBUG
-    private var hotkeyMonitor: HotkeyMonitor?
-    private var hotkeyTask: Task<Void, Never>?
-#endif
+    // Pipeline — held for lifecycle management
+    private var audioCapture: AudioCapture?
+    private var transcriptionEngine: TranscriptionEngine?
+    private var coordinator: DictationCoordinator?
+    private var hudPresenter: HUDPresenter?
+
+    private var accessibilityPollTimer: Timer?
+
+    // MARK: - NSApplicationDelegate
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Enforce menu-bar-only presentation; mirrors LSUIElement = YES in Info.plist.
         NSApp.setActivationPolicy(.accessory)
         setupStatusItem()
-#if DEBUG
-        startDebugHotkeyMonitor()
-#endif
+        requestMicPermission()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-#if DEBUG
-        hotkeyTask?.cancel()
-        hotkeyMonitor?.stop()
-#endif
+        coordinator?.stopListening()
+        accessibilityPollTimer?.invalidate()
     }
 
     // MARK: - Status item
@@ -45,53 +48,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.terminate(nil)
     }
 
-    // MARK: - Debug hotkey smoke-test
+    // MARK: - Pipeline startup
 
+    /// Requests mic access; on grant proceeds to Accessibility check → pipeline launch.
+    private func requestMicPermission() {
+        AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+            DispatchQueue.main.async {
+                guard granted else {
 #if DEBUG
-    private var accessibilityPollTimer: Timer?
+                    print("[DEBUG] Microphone permission denied — pipeline not started")
+#endif
+                    return
+                }
+                self?.checkAccessibilityThenLaunch()
+            }
+        }
+    }
 
-    private func startDebugHotkeyMonitor() {
+    /// Checks Accessibility trust (needed for CGEventTap). If not yet granted,
+    /// opens System Settings and polls until the user enables it, then launches.
+    private func checkAccessibilityThenLaunch() {
         if AXIsProcessTrustedWithOptions(nil) {
-            launchHotkeyMonitor()
+            launchPipeline()
             return
         }
-        // On modern macOS, AXIsProcessTrustedWithOptions([prompt:true]) silently fails for
-        // LSUIElement development builds. Open System Settings directly via URL instead.
         NSWorkspace.shared.open(
+            // swiftlint:disable:next force_unwrapping
             URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
         )
-        print("[DEBUG] Accessibility not granted.")
-        print("[DEBUG] System Settings has been opened to Privacy & Security › Accessibility.")
-        print("[DEBUG] Click '+' and add: \(Bundle.main.bundlePath)")
-        print("[DEBUG] Enable the toggle — the monitor starts automatically within 1 second.")
+#if DEBUG
+        print("[DEBUG] Accessibility not granted — System Settings opened.")
+        print("[DEBUG] Add \(Bundle.main.bundlePath) and enable the toggle.")
+#endif
         accessibilityPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            // Timer fires on main run loop; Task @MainActor makes the isolation explicit
-            // to satisfy strict-concurrency checking.
             Task { @MainActor [weak self] in
                 guard let self, AXIsProcessTrustedWithOptions(nil) else { return }
                 self.accessibilityPollTimer?.invalidate()
                 self.accessibilityPollTimer = nil
-                self.launchHotkeyMonitor()
+                self.launchPipeline()
             }
         }
     }
 
-    private func launchHotkeyMonitor() {
-        let monitor = HotkeyMonitor()
-        hotkeyMonitor = monitor
-        do {
-            try monitor.start()
-            print("[DEBUG] HotkeyMonitor started — double-tap Ctrl to test")
-        } catch {
-            print("[DEBUG] HotkeyMonitor.start() failed: \(error)")
-            return
-        }
-        hotkeyTask = Task { [weak monitor] in
-            guard let stream = monitor?.events else { return }
-            for await event in stream {
-                print("[DEBUG] HotkeyEvent: \(event)")
-            }
-        }
-    }
+    /// Assembles all production types and starts the coordinator.
+    ///
+    /// M3: `isRawMode: true` bypasses cleanup; `TextInserter` logs the transcript
+    /// to console instead of pasting. Real insertion wired in M4.
+    private func launchPipeline() {
+        let audio = AudioCapture()
+        let transcription = TranscriptionEngine(audioCapture: audio)
+        let coordinator = DictationCoordinator(
+            hotkeyMonitor: HotkeyMonitor(),
+            audioCapture: audio,
+            transcriptionEngine: transcription,
+            cleanupService: CleanupService(),
+            textInserter: TextInserter(),
+            isRawMode: true
+        )
+
+        self.audioCapture = audio
+        self.transcriptionEngine = transcription
+        self.coordinator = coordinator
+        self.hudPresenter = HUDPresenter(coordinator: coordinator)
+
+        coordinator.startListening()
+
+#if DEBUG
+        print("[DEBUG] Dicho M3 pipeline running — double-tap Ctrl to dictate")
 #endif
+    }
 }
