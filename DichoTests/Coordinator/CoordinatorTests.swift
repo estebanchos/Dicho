@@ -312,6 +312,29 @@ struct CoordinatorTests {
         _ = audio
     }
 
+    // MARK: Volatile text forwarding (M3)
+
+    @Test("Volatile update while recording sets volatileText on coordinator")
+    func volatileUpdateSetsVolatileText() async {
+        let (coordinator, _, _, _, _) = makeCoordinator()
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "tentative", range: nil, isFinal: false))
+
+        #expect(coordinator.volatileText == "tentative")
+    }
+
+    @Test("Stop clears volatileText")
+    func stopClearsVolatileText() async {
+        let (coordinator, _, _, _, _) = makeCoordinator()
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "tentative", range: nil, isFinal: false))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(coordinator.volatileText == "")
+    }
+
     // MARK: Coordinator import discipline
 
     @Test("Coordinator imports only Foundation (no AVFoundation/Speech/FoundationModels/AppKit)")

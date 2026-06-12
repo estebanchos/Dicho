@@ -13,6 +13,8 @@ final class DictationCoordinator {
     // MARK: - Observable state
 
     private(set) var state: DictationState = .idle
+    /// Current volatile (provisional) transcript text; empty when not recording.
+    private(set) var volatileText: String = ""
 
     /// When true the cleaning state is skipped; raw transcript is inserted.
     var isRawMode: Bool
@@ -88,13 +90,16 @@ final class DictationCoordinator {
         }
     }
 
-    /// Accumulates final transcript segments; forwards volatile text to HUD (M3).
+    /// Accumulates final transcript segments; forwards volatile text to HUD via `volatileText`.
     func handleTranscriptUpdate(_ update: TranscriptUpdate) {
         guard state == .recording else { return }
         if update.isFinal {
             accumulatedTranscript = accumulatedTranscript.isEmpty
                 ? update.text
                 : accumulatedTranscript + " " + update.text
+            volatileText = ""
+        } else {
+            volatileText = update.text
         }
     }
 
@@ -141,6 +146,7 @@ final class DictationCoordinator {
 
     private func stopRecording() async {
         state = .transcribing
+        volatileText = ""
         audioCapture.stopCapture()
         transcriptTask?.cancel()
         transcriptTask = nil
@@ -166,6 +172,7 @@ final class DictationCoordinator {
     private func cancelRecording() {
         state = .idle
         accumulatedTranscript = ""
+        volatileText = ""
         audioCapture.stopCapture()
         transcriptTask?.cancel()
         transcriptTask = nil
