@@ -1,0 +1,231 @@
+import Foundation
+import Observation
+
+/// The core pipeline orchestrator. Owns all state transitions, cancellation,
+/// timeout policy, and the raw-mode bypass decision.
+///
+/// Isolated to `@MainActor` so SwiftUI views can observe `state` directly.
+/// All injected collaborators are accessed only from the main actor.
+@Observable
+@MainActor
+final class DictationCoordinator {
+
+    // MARK: - Observable state
+
+    private(set) var state: DictationState = .idle
+
+    /// When true the cleaning state is skipped; raw transcript is inserted.
+    var isRawMode: Bool
+
+    // MARK: - Notice callback (wired to HUD in M3)
+
+    var onNotice: (@MainActor (DictationNotice) -> Void)?
+
+    // MARK: - Dependencies
+
+    private let hotkeyMonitor: any HotkeyMonitoring
+    private let audioCapture: any AudioCapturing
+    private let transcriptionEngine: any TranscriptionEngineProtocol
+    private let cleanupService: any CleanupServicing
+    private let textInserter: any TextInserting
+
+    // MARK: - Internal pipeline state
+
+    private var accumulatedTranscript = ""
+    private var hotkeyTask: Task<Void, Never>?
+    private var transcriptTask: Task<Void, Never>?
+    private var audioCaptureErrorTask: Task<Void, Never>?
+
+    // MARK: - Init
+
+    init(
+        hotkeyMonitor: any HotkeyMonitoring,
+        audioCapture: any AudioCapturing,
+        transcriptionEngine: any TranscriptionEngineProtocol,
+        cleanupService: any CleanupServicing,
+        textInserter: any TextInserting,
+        isRawMode: Bool = false
+    ) {
+        self.hotkeyMonitor = hotkeyMonitor
+        self.audioCapture = audioCapture
+        self.transcriptionEngine = transcriptionEngine
+        self.cleanupService = cleanupService
+        self.textInserter = textInserter
+        self.isRawMode = isRawMode
+    }
+
+    // MARK: - Hotkey listening
+
+    func startListening() {
+        try? hotkeyMonitor.start()
+        hotkeyTask = Task { [weak self] in
+            guard let self else { return }
+            for await event in self.hotkeyMonitor.events {
+                await self.handleHotkeyEvent(event)
+            }
+        }
+    }
+
+    func stopListening() {
+        hotkeyMonitor.stop()
+        hotkeyTask?.cancel()
+        hotkeyTask = nil
+    }
+
+    // MARK: - Event handlers (internal visibility allows direct call from tests)
+
+    func handleHotkeyEvent(_ event: HotkeyEvent) async {
+        switch (state, event) {
+        case (.idle, .startRequested):
+            await startRecording()
+        case (.recording, .stopRequested):
+            await stopRecording()
+        case (.recording, .cancelRequested),
+             (.transcribing, .cancelRequested):
+            cancelRecording()
+        default:
+            break
+        }
+    }
+
+    /// Accumulates final transcript segments; forwards volatile text to HUD (M3).
+    func handleTranscriptUpdate(_ update: TranscriptUpdate) {
+        guard state == .recording else { return }
+        if update.isFinal {
+            accumulatedTranscript = accumulatedTranscript.isEmpty
+                ? update.text
+                : accumulatedTranscript + " " + update.text
+        }
+    }
+
+    /// Called when `audioCapture.errors` emits — also callable directly from tests.
+    func handleAudioCaptureError(_ error: AudioCaptureError) async {
+        guard state == .recording else { return }
+        let partial = accumulatedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        cancelRecording()
+        if !partial.isEmpty {
+            // Best-effort: insert partial transcript; on failure it stays in pasteboard.
+            try? await textInserter.insert(partial)
+        }
+        onNotice?(.audioCaptureFailed)
+    }
+
+    // MARK: - Private pipeline
+
+    private func startRecording() async {
+        do {
+            try audioCapture.startCapture()
+            try await transcriptionEngine.start()
+        } catch {
+            onNotice?(.audioCaptureFailed)
+            return
+        }
+
+        accumulatedTranscript = ""
+        state = .recording
+
+        transcriptTask = Task { [weak self] in
+            guard let self else { return }
+            for await update in self.transcriptionEngine.updates {
+                self.handleTranscriptUpdate(update)
+            }
+        }
+
+        audioCaptureErrorTask = Task { [weak self] in
+            guard let self else { return }
+            for await error in self.audioCapture.errors {
+                await self.handleAudioCaptureError(error)
+            }
+        }
+    }
+
+    private func stopRecording() async {
+        state = .transcribing
+        audioCapture.stopCapture()
+        transcriptTask?.cancel()
+        transcriptTask = nil
+        audioCaptureErrorTask?.cancel()
+        audioCaptureErrorTask = nil
+        await transcriptionEngine.stop()
+
+        // Guard against a cancel event arriving during the above await.
+        guard state == .transcribing else { return }
+
+        let transcript = accumulatedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        accumulatedTranscript = ""
+
+        guard !transcript.isEmpty else {
+            state = .idle
+            onNotice?(.nothingHeard)
+            return
+        }
+
+        await processTranscript(transcript)
+    }
+
+    private func cancelRecording() {
+        state = .idle
+        accumulatedTranscript = ""
+        audioCapture.stopCapture()
+        transcriptTask?.cancel()
+        transcriptTask = nil
+        audioCaptureErrorTask?.cancel()
+        audioCaptureErrorTask = nil
+        // Fire-and-forget; tear down the engine without blocking the cancel path.
+        Task { [transcriptionEngine] in await transcriptionEngine.stop() }
+    }
+
+    private func processTranscript(_ transcript: String) async {
+        guard !isRawMode else {
+            await insertText(transcript)
+            return
+        }
+
+        state = .cleaning(transcript: transcript)
+
+        let textToInsert: String
+        do {
+            textToInsert = try await withCleanupTimeout {
+                try await self.cleanupService.clean(transcript)
+            }
+        } catch CleanupError.unavailable {
+            textToInsert = transcript
+            onNotice?(.cleanupUnavailable)
+        } catch {
+            // Timeout or any other cleanup error → fall back to raw transcript.
+            textToInsert = transcript
+        }
+
+        // Guard against a cancel arriving during the cleanup await.
+        guard case .cleaning = state else { return }
+
+        await insertText(textToInsert)
+    }
+
+    private func insertText(_ text: String) async {
+        state = .inserting(text: text)
+        do {
+            try await textInserter.insert(text)
+        } catch {
+            onNotice?(.insertionFailed)
+        }
+        state = .idle
+    }
+
+    /// Races the cleanup operation against `Constants.cleanupChunkTimeout`.
+    /// Throws `CleanupError.timeout` if the timeout wins.
+    private func withCleanupTimeout<T: Sendable>(
+        _ operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(for: .seconds(Constants.cleanupChunkTimeout))
+                throw CleanupError.timeout
+            }
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
+    }
+}
