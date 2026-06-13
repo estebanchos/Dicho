@@ -18,36 +18,61 @@ final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendabl
     var updates: AsyncStream<TranscriptUpdate> { updateStream }
 
     func start() async throws {
-        let transcriber = SpeechTranscriber(
-            locale: Locale(identifier: "en-US"),
-            transcriptionOptions: [],
-            reportingOptions: [.volatileResults],
-            attributeOptions: []
-        )
+        // Resolve locale against installed assets so the transcriber can actually run.
+        // Two separate awaits required — ?? right-hand side is @autoclosure (not async).
+        let preferredLocale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "en-US"))
+        let fallbackLocale  = await SpeechTranscriber.supportedLocale(equivalentTo: Locale.current)
+        guard let locale = preferredLocale ?? fallbackLocale else {
+            throw AudioCaptureError.deviceLost
+        }
+#if DEBUG
+        print("[DEBUG] TranscriptionEngine using locale: \(locale.identifier)")
+#endif
+
+        // progressiveTranscription = volatileResults + fastResults — ideal for live dictation.
+        let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
 
         // Ensure assets are installed; download if needed.
         if let request = try? await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+#if DEBUG
+            print("[DEBUG] TranscriptionEngine: downloading speech assets…")
+#endif
             try await request.downloadAndInstall()
         }
 
         guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(
             compatibleWith: [transcriber],
-            considering: audioCapture.targetFormat
+            considering: nil
         ) else {
             throw AudioCaptureError.deviceLost
         }
+#if DEBUG
+        print("[DEBUG] TranscriptionEngine: audio format = \(format)")
+#endif
 
         // Give AudioCapture the new session continuation and the required format.
         let (analyzerStream, analyzerContinuation) = AsyncStream<AnalyzerInput>.makeStream()
         audioCapture.beginSession(continuation: analyzerContinuation, format: format)
 
         let analyzer = SpeechAnalyzer(modules: [transcriber])
+        // Prewarm so the first result isn't delayed by lazy asset loading.
+        try? await analyzer.prepareToAnalyze(in: format)
+
         self.analyzer = analyzer
         self.transcriber = transcriber
 
-        // Feed audio to the analyzer autonomously.
+        // Feed audio to the analyzer. analyzeSequence returns when the stream finishes.
         analyzerTask = Task {
-            _ = try? await analyzer.analyzeSequence(analyzerStream)
+            do {
+                _ = try await analyzer.analyzeSequence(analyzerStream)
+#if DEBUG
+                print("[DEBUG] TranscriptionEngine: analyzeSequence finished")
+#endif
+            } catch {
+#if DEBUG
+                print("[DEBUG] TranscriptionEngine: analyzeSequence error: \(error)")
+#endif
+            }
         }
 
         // Consume results and map to TranscriptUpdate.
@@ -56,21 +81,31 @@ final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendabl
             do {
                 for try await result in transcriber.results {
                     let text = String(result.text.characters)
+#if DEBUG
+                    print("[DEBUG] TranscriptionEngine: result isFinal=\(result.isFinal) text='\(text)'")
+#endif
                     continuation.yield(TranscriptUpdate(text: text, range: nil, isFinal: result.isFinal))
                 }
+#if DEBUG
+                print("[DEBUG] TranscriptionEngine: results stream ended")
+#endif
             } catch {
-                // Result stream ended — normal on stop.
+#if DEBUG
+                print("[DEBUG] TranscriptionEngine: results error: \(error)")
+#endif
             }
         }
     }
 
     func stop() async {
-        analyzerTask?.cancel()
-        analyzerTask = nil
         resultTask?.cancel()
         resultTask = nil
+        analyzerTask?.cancel()
+        analyzerTask = nil
+        // cancelAndFinishNow() terminates the session immediately — no waiting for
+        // input to drain, so this never hangs even if analyzeSequence was cancelled.
         if let analyzer {
-            try? await analyzer.finalizeAndFinishThroughEndOfInput()
+            await analyzer.cancelAndFinishNow()
         }
         analyzer = nil
         transcriber = nil

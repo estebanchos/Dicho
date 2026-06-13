@@ -119,8 +119,11 @@ final class DictationCoordinator {
 
     private func startRecording() async {
         do {
-            try audioCapture.startCapture()
+            // TranscriptionEngine.start() must run first: it calls audioCapture.beginSession()
+            // to register the AnalyzerInput continuation. startCapture() then captures that
+            // non-nil continuation in its tap closure. Reversing the order starves the analyzer.
             try await transcriptionEngine.start()
+            try audioCapture.startCapture()
         } catch {
             onNotice?(.audioCaptureFailed)
             return
