@@ -8,9 +8,13 @@ import Speech
 /// `start()` asks `AudioCapture` for the session's `AnalyzerInput` stream and
 /// registers the correct audio format.
 ///
+/// Stream lifecycle: `start()` creates a fresh `updates` stream for each session;
+/// `stop()` finalizes the analyzer, waits for all results, then finishes the stream.
+/// The coordinator's transcript task exits naturally when the stream ends.
+///
 /// - Note: `@unchecked Sendable` — mutable state is guarded by actor isolation
-///   (`start`/`stop` are `async`), and `analyzerTask`/`resultTask` are only
-///   written on the caller's task, which is always `@MainActor` via the coordinator.
+///   (`start`/`stop` are always called from `@MainActor` via the coordinator).
+///   `analyzerTask`/`resultTask` are written only on the caller's actor.
 final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendable {
 
     // MARK: - TranscriptionEngineProtocol
@@ -18,6 +22,9 @@ final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendabl
     var updates: AsyncStream<TranscriptUpdate> { updateStream }
 
     func start() async throws {
+        // Create a fresh updates stream for this session.
+        (updateStream, updateContinuation) = AsyncStream.makeStream(of: TranscriptUpdate.self)
+
         // Resolve locale against installed assets so the transcriber can actually run.
         // Two separate awaits required — ?? right-hand side is @autoclosure (not async).
         let preferredLocale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "en-US"))
@@ -84,7 +91,7 @@ final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendabl
 #if DEBUG
                     print("[DEBUG] TranscriptionEngine: result isFinal=\(result.isFinal) text='\(text)'")
 #endif
-                    continuation.yield(TranscriptUpdate(text: text, range: nil, isFinal: result.isFinal))
+                    continuation?.yield(TranscriptUpdate(text: text, range: nil, isFinal: result.isFinal))
                 }
 #if DEBUG
                 print("[DEBUG] TranscriptionEngine: results stream ended")
@@ -98,23 +105,40 @@ final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendabl
     }
 
     func stop() async {
-        resultTask?.cancel()
-        resultTask = nil
-        analyzerTask?.cancel()
+        // Capture the active continuation before any suspension point.
+        // If start() runs concurrently (cancel path fire-and-forget), this ensures
+        // we finish the OLD session's stream, not the new one.
+        let savedContinuation = updateContinuation
+
+        // Let analyzeSequence drain the already-finished audio stream naturally.
+        // This must complete before finalizeAndFinishThroughEndOfInput() is called;
+        // otherwise the analyzer waits for a new input sequence that never arrives.
+        if let task = analyzerTask { await task.value }
         analyzerTask = nil
-        // cancelAndFinishNow() terminates the session immediately — no waiting for
-        // input to drain, so this never hangs even if analyzeSequence was cancelled.
+
+        // Finalize: converts all in-flight volatile results to final results and
+        // terminates the transcriber.results stream.
         if let analyzer {
-            await analyzer.cancelAndFinishNow()
+            try? await analyzer.finalizeAndFinishThroughEndOfInput()
         }
         analyzer = nil
+
+        // Wait for resultTask to deliver all final results to the updates continuation.
+        // The coordinator's transcriptTask runs during this await (same @MainActor) and
+        // processes the yielded updates into accumulatedTranscript.
+        if let task = resultTask { await task.value }
+        resultTask = nil
         transcriber = nil
+
+        // Signal end of this session's updates stream so the coordinator's
+        // transcriptTask exits naturally after draining any remaining buffered results.
+        savedContinuation?.finish()
     }
 
     // MARK: - Private
 
-    private let updateStream: AsyncStream<TranscriptUpdate>
-    private let updateContinuation: AsyncStream<TranscriptUpdate>.Continuation
+    private var updateStream: AsyncStream<TranscriptUpdate>
+    private var updateContinuation: AsyncStream<TranscriptUpdate>.Continuation?
 
     // Held unowned — AudioCapture outlives any single session.
     private unowned let audioCapture: AudioCapture
@@ -126,6 +150,8 @@ final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendabl
 
     init(audioCapture: AudioCapture) {
         self.audioCapture = audioCapture
-        (updateStream, updateContinuation) = AsyncStream.makeStream(of: TranscriptUpdate.self)
+        // Placeholder stream; replaced by a fresh one on each start() call.
+        (updateStream, _) = AsyncStream.makeStream(of: TranscriptUpdate.self)
+        updateContinuation = nil
     }
 }

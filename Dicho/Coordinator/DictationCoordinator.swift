@@ -91,14 +91,19 @@ final class DictationCoordinator {
     }
 
     /// Accumulates final transcript segments; forwards volatile text to HUD via `volatileText`.
+    ///
+    /// Final results are also accepted during `.transcribing`: with `progressiveTranscription`
+    /// the engine only finalizes volatile results when `stop()` calls
+    /// `finalizeAndFinishThroughEndOfInput()`, which runs after the state has already
+    /// advanced to `.transcribing`.
     func handleTranscriptUpdate(_ update: TranscriptUpdate) {
-        guard state == .recording else { return }
+        guard state == .recording || state == .transcribing else { return }
         if update.isFinal {
             accumulatedTranscript = accumulatedTranscript.isEmpty
                 ? update.text
                 : accumulatedTranscript + " " + update.text
             volatileText = ""
-        } else {
+        } else if state == .recording {
             volatileText = update.text
         }
     }
@@ -151,13 +156,16 @@ final class DictationCoordinator {
         state = .transcribing
         volatileText = ""
         audioCapture.stopCapture()
-        transcriptTask?.cancel()
-        transcriptTask = nil
         audioCaptureErrorTask?.cancel()
         audioCaptureErrorTask = nil
+        // Keep transcriptTask alive during stop(): the engine finalizes volatile results
+        // and finishes the updates stream inside stop(). transcriptTask then drains the
+        // final results (calling handleTranscriptUpdate) and exits naturally.
         await transcriptionEngine.stop()
+        if let task = transcriptTask { await task.value }
+        transcriptTask = nil
 
-        // Guard against a cancel event arriving during the above await.
+        // Guard against a cancel event arriving during the above awaits.
         guard state == .transcribing else { return }
 
         let transcript = accumulatedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
