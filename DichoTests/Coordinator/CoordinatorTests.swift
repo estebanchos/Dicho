@@ -312,6 +312,46 @@ struct CoordinatorTests {
         _ = audio
     }
 
+    // MARK: Volatile text forwarding (M3)
+
+    @Test("Volatile update while recording sets volatileText on coordinator")
+    func volatileUpdateSetsVolatileText() async {
+        let (coordinator, _, _, _, _) = makeCoordinator()
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "tentative", range: nil, isFinal: false))
+
+        #expect(coordinator.volatileText == "tentative")
+    }
+
+    @Test("Stop clears volatileText")
+    func stopClearsVolatileText() async {
+        let (coordinator, _, _, _, _) = makeCoordinator()
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "tentative", range: nil, isFinal: false))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(coordinator.volatileText == "")
+    }
+
+    // MARK: Finalization (M3 production scenario)
+
+    @Test("Final transcript delivered by engine during stop() is accumulated and inserted")
+    func finalTranscriptFromStopIsInserted() async {
+        let (coordinator, _, transcription, _, insertion) = makeCoordinator(rawMode: true)
+        // Simulates the production case: no isFinal results during recording;
+        // the transcript arrives only when the engine finalizes on stop.
+        transcription.stubbedFinalTranscript = "finalized during stop"
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        // Deliberately no handleTranscriptUpdate calls here.
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(coordinator.state == .idle)
+        #expect(insertion.insertedText == "finalized during stop")
+    }
+
     // MARK: Coordinator import discipline
 
     @Test("Coordinator imports only Foundation (no AVFoundation/Speech/FoundationModels/AppKit)")
