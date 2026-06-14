@@ -37,10 +37,11 @@ final class HUDPresenter {
 
     // MARK: - Private
 
-    /// Recursively re-registers observation so every state change re-evaluates visibility.
+    /// Recursively re-registers observation so every state or notice change
+    /// re-evaluates visibility.
     private func scheduleObservation(coordinator: DictationCoordinator) {
         withObservationTracking {
-            updateVisibility(coordinator.state)
+            updateVisibility(state: coordinator.state, notice: coordinator.activeNotice)
         } onChange: { [weak self] in
             DispatchQueue.main.async {
                 self?.scheduleObservation(coordinator: coordinator)
@@ -48,8 +49,8 @@ final class HUDPresenter {
         }
     }
 
-    private func updateVisibility(_ state: DictationState) {
-        if state == .idle {
+    private func updateVisibility(state: DictationState, notice: DictationNotice?) {
+        if state == .idle && notice == nil {
             panel.orderOut(nil)
         } else {
             positionPanel()

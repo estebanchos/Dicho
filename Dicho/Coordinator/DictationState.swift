@@ -18,4 +18,14 @@ enum DictationNotice: Equatable, Sendable {
     case cleanupUnavailable
     case insertionFailed
     case audioCaptureFailed
+
+    /// Single source of truth for the user-facing string each notice renders to.
+    var displayText: String {
+        switch self {
+        case .nothingHeard:        return "Nothing heard"
+        case .cleanupUnavailable:  return "Cleanup unavailable"
+        case .insertionFailed:     return "Copied to clipboard — paste manually"
+        case .audioCaptureFailed:  return "Audio capture failed"
+        }
+    }
 }

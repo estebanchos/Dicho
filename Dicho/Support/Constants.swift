@@ -20,4 +20,9 @@ enum Constants {
     /// Token budget per cleanup chunk (approximate; enforced by CleanupService).
     /// Keeps individual FoundationModels requests well within session limits.
     static let cleanupChunkTokenBudget: Int = 512
+
+    /// How long the HUD surfaces a `DictationNotice` before auto-dismissing.
+    /// Long enough to read a short status message ("Copied to clipboard — paste
+    /// manually"), short enough not to linger after the user has moved on.
+    static let noticeDisplayDuration: TimeInterval = 2.5
 }

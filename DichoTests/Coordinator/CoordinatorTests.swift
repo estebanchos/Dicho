@@ -352,6 +352,41 @@ struct CoordinatorTests {
         #expect(insertion.insertedText == "finalized during stop")
     }
 
+    // MARK: User-visible notice surface (M4)
+
+    @Test("Insertion failure publishes activeNotice for HUD to render")
+    func insertionFailureSetsActiveNotice() async {
+        let (coordinator, _, _, _, insertion) = makeCoordinator()
+        insertion.stubbedError = InsertionError.accessibilityUnavailable
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "text", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(coordinator.activeNotice == .insertionFailed)
+    }
+
+    @Test("Empty transcript publishes nothingHeard as activeNotice")
+    func emptyTranscriptSetsActiveNotice() async {
+        let (coordinator, _, _, _, _) = makeCoordinator()
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(coordinator.activeNotice == .nothingHeard)
+    }
+
+    @Test("Successful insertion does not set activeNotice")
+    func successfulInsertionLeavesNoticeNil() async {
+        let (coordinator, _, _, _, _) = makeCoordinator(rawMode: true)
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "ok", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(coordinator.activeNotice == nil)
+    }
+
     // MARK: Coordinator import discipline
 
     @Test("Coordinator imports only Foundation (no AVFoundation/Speech/FoundationModels/AppKit)")

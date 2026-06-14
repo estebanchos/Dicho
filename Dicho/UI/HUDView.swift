@@ -13,6 +13,7 @@ struct HUDView: View {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
             .animation(.easeInOut(duration: 0.15), value: coordinator.state)
+            .animation(.easeInOut(duration: 0.15), value: coordinator.activeNotice)
     }
 
     @ViewBuilder
@@ -50,7 +51,18 @@ struct HUDView: View {
                     .font(.system(.body, design: .rounded))
             }
         case .idle:
-            EmptyView()
+            if let notice = coordinator.activeNotice {
+                HStack(spacing: 10) {
+                    Image(systemName: "info.circle.fill")
+                        .foregroundStyle(.orange)
+                    Text(notice.displayText)
+                        .font(.system(.body, design: .rounded))
+                        .lineLimit(2)
+                        .frame(maxWidth: 320, alignment: .leading)
+                }
+            } else {
+                EmptyView()
+            }
         }
     }
 }

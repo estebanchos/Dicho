@@ -15,11 +15,14 @@ final class DictationCoordinator {
     private(set) var state: DictationState = .idle
     /// Current volatile (provisional) transcript text; empty when not recording.
     private(set) var volatileText: String = ""
+    /// Last fired notice, surfaced to the HUD for transient display.
+    /// Auto-clears after `Constants.noticeDisplayDuration`.
+    private(set) var activeNotice: DictationNotice?
 
     /// When true the cleaning state is skipped; raw transcript is inserted.
     var isRawMode: Bool
 
-    // MARK: - Notice callback (wired to HUD in M3)
+    // MARK: - Notice callback (kept for test introspection alongside activeNotice)
 
     var onNotice: (@MainActor (DictationNotice) -> Void)?
 
@@ -37,6 +40,7 @@ final class DictationCoordinator {
     private var hotkeyTask: Task<Void, Never>?
     private var transcriptTask: Task<Void, Never>?
     private var audioCaptureErrorTask: Task<Void, Never>?
+    private var noticeClearTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -117,7 +121,7 @@ final class DictationCoordinator {
             // Best-effort: insert partial transcript; on failure it stays in pasteboard.
             try? await textInserter.insert(partial)
         }
-        onNotice?(.audioCaptureFailed)
+        fireNotice(.audioCaptureFailed)
     }
 
     // MARK: - Private pipeline
@@ -130,7 +134,7 @@ final class DictationCoordinator {
             try await transcriptionEngine.start()
             try audioCapture.startCapture()
         } catch {
-            onNotice?(.audioCaptureFailed)
+            fireNotice(.audioCaptureFailed)
             return
         }
 
@@ -173,7 +177,7 @@ final class DictationCoordinator {
 
         guard !transcript.isEmpty else {
             state = .idle
-            onNotice?(.nothingHeard)
+            fireNotice(.nothingHeard)
             return
         }
 
@@ -208,7 +212,7 @@ final class DictationCoordinator {
             }
         } catch CleanupError.unavailable {
             textToInsert = transcript
-            onNotice?(.cleanupUnavailable)
+            fireNotice(.cleanupUnavailable)
         } catch {
             // Timeout or any other cleanup error → fall back to raw transcript.
             textToInsert = transcript
@@ -225,9 +229,24 @@ final class DictationCoordinator {
         do {
             try await textInserter.insert(text)
         } catch {
-            onNotice?(.insertionFailed)
+            fireNotice(.insertionFailed)
         }
         state = .idle
+    }
+
+    /// Publishes a notice on the observable surface, invokes the callback for any
+    /// test/log observer, and schedules an auto-clear of `activeNotice` after
+    /// `Constants.noticeDisplayDuration`. Replacing a still-displayed notice
+    /// cancels the previous clear task so the new notice gets a full display.
+    private func fireNotice(_ notice: DictationNotice) {
+        activeNotice = notice
+        onNotice?(notice)
+        noticeClearTask?.cancel()
+        noticeClearTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Constants.noticeDisplayDuration))
+            guard !Task.isCancelled else { return }
+            self?.activeNotice = nil
+        }
     }
 
     /// Races the cleanup operation against `Constants.cleanupChunkTimeout`.
