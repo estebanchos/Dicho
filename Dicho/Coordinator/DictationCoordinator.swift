@@ -136,6 +136,9 @@ final class DictationCoordinator {
             // non-nil continuation in its tap closure. Reversing the order starves the analyzer.
             try await transcriptionEngine.start()
             try audioCapture.startCapture()
+        } catch AudioCaptureError.permissionMissing {
+            fireNotice(.microphonePermissionMissing)
+            return
         } catch {
             fireNotice(.audioCaptureFailed)
             return

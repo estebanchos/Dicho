@@ -18,14 +18,18 @@ enum DictationNotice: Equatable, Sendable {
     case cleanupUnavailable
     case insertionFailed
     case audioCaptureFailed
+    /// User attempted to record but microphone authorization is not granted.
+    /// Onboarding will offer the System Settings deep link in M6.
+    case microphonePermissionMissing
 
     /// Single source of truth for the user-facing string each notice renders to.
     var displayText: String {
         switch self {
-        case .nothingHeard:        return "Nothing heard"
-        case .cleanupUnavailable:  return "Cleanup unavailable"
-        case .insertionFailed:     return "Copied to clipboard — paste manually"
-        case .audioCaptureFailed:  return "Audio capture failed"
+        case .nothingHeard:                 return "Nothing heard"
+        case .cleanupUnavailable:           return "Cleanup unavailable"
+        case .insertionFailed:              return "Copied to clipboard — paste manually"
+        case .audioCaptureFailed:           return "Audio capture failed"
+        case .microphonePermissionMissing:  return "Microphone access required — open System Settings"
         }
     }
 }

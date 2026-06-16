@@ -256,7 +256,7 @@ struct CoordinatorTests {
     @Test("startCapture() throws → idle, audioCaptureFailed notice, nothing inserted")
     func audioStartFailureGoesToIdle() async {
         let (coordinator, audio, _, _, insertion) = makeCoordinator()
-        audio.shouldThrowOnStart = true
+        audio.startError = .deviceLost
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
 
@@ -265,6 +265,21 @@ struct CoordinatorTests {
         #expect(coordinator.state == .idle)
         #expect(insertion.insertedText == nil)
         #expect(notices == [.audioCaptureFailed])
+    }
+
+    @Test("startCapture() throws permissionMissing → microphonePermissionMissing notice, not the generic audioCaptureFailed")
+    func micPermissionMissingFiresSpecificNotice() async {
+        let (coordinator, audio, _, _, insertion) = makeCoordinator()
+        audio.startError = .permissionMissing
+        var notices: [DictationNotice] = []
+        coordinator.onNotice = { notices.append($0) }
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+
+        #expect(coordinator.state == .idle)
+        #expect(insertion.insertedText == nil)
+        #expect(notices == [.microphonePermissionMissing])
+        #expect(coordinator.activeNotice == .microphonePermissionMissing)
     }
 
     @Test("transcriptionEngine.start() throws → idle, audioCaptureFailed notice")

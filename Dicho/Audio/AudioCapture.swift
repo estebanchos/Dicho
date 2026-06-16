@@ -19,8 +19,11 @@ final class AudioCapture: AudioCapturing, @unchecked Sendable {
     func startCapture() throws {
         guard !isRunning else { return }
 
+        // `permissionMissing` (not `permissionRevoked`): the latter is reserved
+        // for the user revoking access mid-session and is emitted via the
+        // `errors` stream, not thrown from `startCapture()`.
         guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
-            throw AudioCaptureError.permissionRevoked
+            throw AudioCaptureError.permissionMissing
         }
 
         let engine = AVAudioEngine()

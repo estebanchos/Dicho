@@ -50,16 +50,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Pipeline startup
 
-    /// Requests mic access; on grant proceeds to Accessibility check → pipeline launch.
+    /// Triggers the mic permission OS prompt (if undetermined) and then proceeds
+    /// to the Accessibility check / pipeline launch regardless of the result.
+    ///
+    /// Launching the pipeline unconditionally lets the hotkey monitor stay
+    /// active so the user gets feedback when they attempt to dictate without
+    /// mic permission — the coordinator surfaces
+    /// `DictationNotice.microphonePermissionMissing` in the HUD instead of
+    /// silently failing.
     private func requestMicPermission() {
         AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
             DispatchQueue.main.async {
-                guard granted else {
 #if DEBUG
-                    print("[DEBUG] Microphone permission denied — pipeline not started")
-#endif
-                    return
+                if !granted {
+                    print("[DEBUG] Microphone permission not granted — pipeline still starting; recording attempts will surface the notice")
                 }
+#endif
                 self?.checkAccessibilityThenLaunch()
             }
         }

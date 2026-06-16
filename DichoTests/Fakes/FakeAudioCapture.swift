@@ -8,7 +8,8 @@ final class FakeAudioCapture: AudioCapturing {
 
     private(set) var startCallCount = 0
     private(set) var stopCallCount = 0
-    var shouldThrowOnStart = false
+    /// When non-nil, `startCapture()` throws this error instead of succeeding.
+    var startError: AudioCaptureError?
 
     init() {
         var cont: AsyncStream<AudioCaptureError>.Continuation!
@@ -17,7 +18,7 @@ final class FakeAudioCapture: AudioCapturing {
     }
 
     func startCapture() throws {
-        if shouldThrowOnStart { throw AudioCaptureError.deviceLost }
+        if let error = startError { throw error }
         startCallCount += 1
     }
 
