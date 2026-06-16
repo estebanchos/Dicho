@@ -7,11 +7,18 @@ struct HUDView: View {
     let coordinator: DictationCoordinator
 
     var body: some View {
+        // The card is built first (content + padding + material background +
+        // shadow). It sizes itself to the content. We then place it inside a
+        // flexible `.frame` matching the fixed panel area so the card is
+        // horizontally centered and bottom-anchored — this keeps the visual
+        // baseline stable across different card sizes (mic icon alone vs. a
+        // wrapping 3-line transcript vs. the notice text).
         content
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .animation(.easeInOut(duration: 0.15), value: coordinator.state)
             .animation(.easeInOut(duration: 0.15), value: coordinator.activeNotice)
     }
