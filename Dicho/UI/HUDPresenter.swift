@@ -37,10 +37,14 @@ final class HUDPresenter {
 
     // MARK: - Private
 
-    /// Recursively re-registers observation so every state or notice change
-    /// re-evaluates visibility.
+    /// Recursively re-registers observation so every state, notice, or
+    /// transcript change re-evaluates visibility and panel size.
     private func scheduleObservation(coordinator: DictationCoordinator) {
         withObservationTracking {
+            // Touch every observable that affects rendered content so the
+            // observation fires (and the panel resizes) as the transcript grows.
+            _ = coordinator.finalizedTranscript
+            _ = coordinator.volatileText
             updateVisibility(state: coordinator.state, notice: coordinator.activeNotice)
         } onChange: { [weak self] in
             DispatchQueue.main.async {
@@ -52,9 +56,19 @@ final class HUDPresenter {
     private func updateVisibility(state: DictationState, notice: DictationNotice?) {
         if state == .idle && notice == nil {
             panel.orderOut(nil)
-        } else {
-            positionPanel()
-            panel.orderFront(nil)
+            return
+        }
+        // Show the panel right away with the current (possibly stale) fitting
+        // size, then re-position once SwiftUI has laid out the new content.
+        // Reading `fittingSize` synchronously inside the observation callback
+        // returns the *previous* content's size — deferring fixes both the
+        // first-show clipping ("Listening…" cut off after .idle → .recording)
+        // and the in-place content swap ("Copied to clipboard — paste manually"
+        // clipped when transitioning .inserting → .idle + notice).
+        positionPanel()
+        panel.orderFront(nil)
+        DispatchQueue.main.async { [weak self] in
+            self?.positionPanel()
         }
     }
 

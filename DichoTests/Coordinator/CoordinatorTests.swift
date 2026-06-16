@@ -352,6 +352,20 @@ struct CoordinatorTests {
         #expect(insertion.insertedText == "finalized during stop")
     }
 
+    // MARK: Live transcript surface for HUD (M4 fix)
+
+    @Test("Recording exposes finalized + volatile transcript to the HUD")
+    func recordingExposesFinalizedTranscriptToHUD() async {
+        let (coordinator, _, _, _, _) = makeCoordinator()
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "hello", range: nil, isFinal: true))
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "world", range: nil, isFinal: false))
+
+        #expect(coordinator.finalizedTranscript == "hello")
+        #expect(coordinator.volatileText == "world")
+    }
+
     // MARK: User-visible notice surface (M4)
 
     @Test("Insertion failure publishes activeNotice for HUD to render")

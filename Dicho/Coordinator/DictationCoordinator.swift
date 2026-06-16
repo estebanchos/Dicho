@@ -13,6 +13,10 @@ final class DictationCoordinator {
     // MARK: - Observable state
 
     private(set) var state: DictationState = .idle
+    /// Finalized transcript so far during the current recording session.
+    /// Rendered at full opacity in the HUD; concatenated with `volatileText`
+    /// (dimmed) to form the live preview. Cleared on start, stop, and cancel.
+    private(set) var finalizedTranscript: String = ""
     /// Current volatile (provisional) transcript text; empty when not recording.
     private(set) var volatileText: String = ""
     /// Last fired notice, surfaced to the HUD for transient display.
@@ -36,7 +40,6 @@ final class DictationCoordinator {
 
     // MARK: - Internal pipeline state
 
-    private var accumulatedTranscript = ""
     private var hotkeyTask: Task<Void, Never>?
     private var transcriptTask: Task<Void, Never>?
     private var audioCaptureErrorTask: Task<Void, Never>?
@@ -103,9 +106,9 @@ final class DictationCoordinator {
     func handleTranscriptUpdate(_ update: TranscriptUpdate) {
         guard state == .recording || state == .transcribing else { return }
         if update.isFinal {
-            accumulatedTranscript = accumulatedTranscript.isEmpty
+            finalizedTranscript = finalizedTranscript.isEmpty
                 ? update.text
-                : accumulatedTranscript + " " + update.text
+                : finalizedTranscript + " " + update.text
             volatileText = ""
         } else if state == .recording {
             volatileText = update.text
@@ -115,7 +118,7 @@ final class DictationCoordinator {
     /// Called when `audioCapture.errors` emits — also callable directly from tests.
     func handleAudioCaptureError(_ error: AudioCaptureError) async {
         guard state == .recording else { return }
-        let partial = accumulatedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let partial = finalizedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         cancelRecording()
         if !partial.isEmpty {
             // Best-effort: insert partial transcript; on failure it stays in pasteboard.
@@ -138,7 +141,7 @@ final class DictationCoordinator {
             return
         }
 
-        accumulatedTranscript = ""
+        finalizedTranscript = ""
         state = .recording
 
         transcriptTask = Task { [weak self] in
@@ -172,8 +175,8 @@ final class DictationCoordinator {
         // Guard against a cancel event arriving during the above awaits.
         guard state == .transcribing else { return }
 
-        let transcript = accumulatedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-        accumulatedTranscript = ""
+        let transcript = finalizedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        finalizedTranscript = ""
 
         guard !transcript.isEmpty else {
             state = .idle
@@ -186,7 +189,7 @@ final class DictationCoordinator {
 
     private func cancelRecording() {
         state = .idle
-        accumulatedTranscript = ""
+        finalizedTranscript = ""
         volatileText = ""
         audioCapture.stopCapture()
         transcriptTask?.cancel()
