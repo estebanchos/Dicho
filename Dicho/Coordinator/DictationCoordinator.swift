@@ -13,13 +13,20 @@ final class DictationCoordinator {
     // MARK: - Observable state
 
     private(set) var state: DictationState = .idle
+    /// Finalized transcript so far during the current recording session.
+    /// Rendered at full opacity in the HUD; concatenated with `volatileText`
+    /// (dimmed) to form the live preview. Cleared on start, stop, and cancel.
+    private(set) var finalizedTranscript: String = ""
     /// Current volatile (provisional) transcript text; empty when not recording.
     private(set) var volatileText: String = ""
+    /// Last fired notice, surfaced to the HUD for transient display.
+    /// Auto-clears after `Constants.noticeDisplayDuration`.
+    private(set) var activeNotice: DictationNotice?
 
     /// When true the cleaning state is skipped; raw transcript is inserted.
     var isRawMode: Bool
 
-    // MARK: - Notice callback (wired to HUD in M3)
+    // MARK: - Notice callback (kept for test introspection alongside activeNotice)
 
     var onNotice: (@MainActor (DictationNotice) -> Void)?
 
@@ -33,10 +40,10 @@ final class DictationCoordinator {
 
     // MARK: - Internal pipeline state
 
-    private var accumulatedTranscript = ""
     private var hotkeyTask: Task<Void, Never>?
     private var transcriptTask: Task<Void, Never>?
     private var audioCaptureErrorTask: Task<Void, Never>?
+    private var noticeClearTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -99,9 +106,9 @@ final class DictationCoordinator {
     func handleTranscriptUpdate(_ update: TranscriptUpdate) {
         guard state == .recording || state == .transcribing else { return }
         if update.isFinal {
-            accumulatedTranscript = accumulatedTranscript.isEmpty
+            finalizedTranscript = finalizedTranscript.isEmpty
                 ? update.text
-                : accumulatedTranscript + " " + update.text
+                : finalizedTranscript + " " + update.text
             volatileText = ""
         } else if state == .recording {
             volatileText = update.text
@@ -111,13 +118,13 @@ final class DictationCoordinator {
     /// Called when `audioCapture.errors` emits — also callable directly from tests.
     func handleAudioCaptureError(_ error: AudioCaptureError) async {
         guard state == .recording else { return }
-        let partial = accumulatedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let partial = finalizedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         cancelRecording()
         if !partial.isEmpty {
             // Best-effort: insert partial transcript; on failure it stays in pasteboard.
             try? await textInserter.insert(partial)
         }
-        onNotice?(.audioCaptureFailed)
+        fireNotice(.audioCaptureFailed)
     }
 
     // MARK: - Private pipeline
@@ -129,12 +136,15 @@ final class DictationCoordinator {
             // non-nil continuation in its tap closure. Reversing the order starves the analyzer.
             try await transcriptionEngine.start()
             try audioCapture.startCapture()
+        } catch AudioCaptureError.permissionMissing {
+            fireNotice(.microphonePermissionMissing)
+            return
         } catch {
-            onNotice?(.audioCaptureFailed)
+            fireNotice(.audioCaptureFailed)
             return
         }
 
-        accumulatedTranscript = ""
+        finalizedTranscript = ""
         state = .recording
 
         transcriptTask = Task { [weak self] in
@@ -168,12 +178,12 @@ final class DictationCoordinator {
         // Guard against a cancel event arriving during the above awaits.
         guard state == .transcribing else { return }
 
-        let transcript = accumulatedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-        accumulatedTranscript = ""
+        let transcript = finalizedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        finalizedTranscript = ""
 
         guard !transcript.isEmpty else {
             state = .idle
-            onNotice?(.nothingHeard)
+            fireNotice(.nothingHeard)
             return
         }
 
@@ -182,7 +192,7 @@ final class DictationCoordinator {
 
     private func cancelRecording() {
         state = .idle
-        accumulatedTranscript = ""
+        finalizedTranscript = ""
         volatileText = ""
         audioCapture.stopCapture()
         transcriptTask?.cancel()
@@ -208,7 +218,7 @@ final class DictationCoordinator {
             }
         } catch CleanupError.unavailable {
             textToInsert = transcript
-            onNotice?(.cleanupUnavailable)
+            fireNotice(.cleanupUnavailable)
         } catch {
             // Timeout or any other cleanup error → fall back to raw transcript.
             textToInsert = transcript
@@ -225,9 +235,24 @@ final class DictationCoordinator {
         do {
             try await textInserter.insert(text)
         } catch {
-            onNotice?(.insertionFailed)
+            fireNotice(.insertionFailed)
         }
         state = .idle
+    }
+
+    /// Publishes a notice on the observable surface, invokes the callback for any
+    /// test/log observer, and schedules an auto-clear of `activeNotice` after
+    /// `Constants.noticeDisplayDuration`. Replacing a still-displayed notice
+    /// cancels the previous clear task so the new notice gets a full display.
+    private func fireNotice(_ notice: DictationNotice) {
+        activeNotice = notice
+        onNotice?(notice)
+        noticeClearTask?.cancel()
+        noticeClearTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Constants.noticeDisplayDuration))
+            guard !Task.isCancelled else { return }
+            self?.activeNotice = nil
+        }
     }
 
     /// Races the cleanup operation against `Constants.cleanupChunkTimeout`.

@@ -256,7 +256,7 @@ struct CoordinatorTests {
     @Test("startCapture() throws → idle, audioCaptureFailed notice, nothing inserted")
     func audioStartFailureGoesToIdle() async {
         let (coordinator, audio, _, _, insertion) = makeCoordinator()
-        audio.shouldThrowOnStart = true
+        audio.startError = .deviceLost
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
 
@@ -265,6 +265,21 @@ struct CoordinatorTests {
         #expect(coordinator.state == .idle)
         #expect(insertion.insertedText == nil)
         #expect(notices == [.audioCaptureFailed])
+    }
+
+    @Test("startCapture() throws permissionMissing → microphonePermissionMissing notice, not the generic audioCaptureFailed")
+    func micPermissionMissingFiresSpecificNotice() async {
+        let (coordinator, audio, _, _, insertion) = makeCoordinator()
+        audio.startError = .permissionMissing
+        var notices: [DictationNotice] = []
+        coordinator.onNotice = { notices.append($0) }
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+
+        #expect(coordinator.state == .idle)
+        #expect(insertion.insertedText == nil)
+        #expect(notices == [.microphonePermissionMissing])
+        #expect(coordinator.activeNotice == .microphonePermissionMissing)
     }
 
     @Test("transcriptionEngine.start() throws → idle, audioCaptureFailed notice")
@@ -350,6 +365,55 @@ struct CoordinatorTests {
 
         #expect(coordinator.state == .idle)
         #expect(insertion.insertedText == "finalized during stop")
+    }
+
+    // MARK: Live transcript surface for HUD (M4 fix)
+
+    @Test("Recording exposes finalized + volatile transcript to the HUD")
+    func recordingExposesFinalizedTranscriptToHUD() async {
+        let (coordinator, _, _, _, _) = makeCoordinator()
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "hello", range: nil, isFinal: true))
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "world", range: nil, isFinal: false))
+
+        #expect(coordinator.finalizedTranscript == "hello")
+        #expect(coordinator.volatileText == "world")
+    }
+
+    // MARK: User-visible notice surface (M4)
+
+    @Test("Insertion failure publishes activeNotice for HUD to render")
+    func insertionFailureSetsActiveNotice() async {
+        let (coordinator, _, _, _, insertion) = makeCoordinator()
+        insertion.stubbedError = InsertionError.accessibilityUnavailable
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "text", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(coordinator.activeNotice == .insertionFailed)
+    }
+
+    @Test("Empty transcript publishes nothingHeard as activeNotice")
+    func emptyTranscriptSetsActiveNotice() async {
+        let (coordinator, _, _, _, _) = makeCoordinator()
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(coordinator.activeNotice == .nothingHeard)
+    }
+
+    @Test("Successful insertion does not set activeNotice")
+    func successfulInsertionLeavesNoticeNil() async {
+        let (coordinator, _, _, _, _) = makeCoordinator(rawMode: true)
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "ok", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(coordinator.activeNotice == nil)
     }
 
     // MARK: Coordinator import discipline

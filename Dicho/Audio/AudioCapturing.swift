@@ -1,9 +1,13 @@
 import Foundation
 
-/// Errors emitted by an audio capture session while active.
+/// Errors emitted by an audio capture session while active or at start time.
 enum AudioCaptureError: Error, Sendable {
     case deviceLost
     case permissionRevoked
+    /// Microphone authorization is not `.authorized` at the moment a recording
+    /// is requested. Distinct from `permissionRevoked`, which fires when the
+    /// user revokes access while a session is already active.
+    case permissionMissing
 }
 
 /// Protocol seam for microphone audio capture. Production type: `AudioCapture`.
