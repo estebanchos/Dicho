@@ -416,6 +416,22 @@ struct CoordinatorTests {
         #expect(coordinator.activeNotice == nil)
     }
 
+    // MARK: Cleanup prewarm lifecycle (M5)
+
+    @Test("prewarm called on cleanup service when recording starts in non-raw mode")
+    func prewarmCalledOnRecordingStart() async {
+        let (coordinator, _, _, cleanup, _) = makeCoordinator(rawMode: false)
+        await coordinator.handleHotkeyEvent(.startRequested)
+        #expect(cleanup.prewarmCallCount == 1)
+    }
+
+    @Test("prewarm not called when raw mode is active")
+    func prewarmNotCalledInRawMode() async {
+        let (coordinator, _, _, cleanup, _) = makeCoordinator(rawMode: true)
+        await coordinator.handleHotkeyEvent(.startRequested)
+        #expect(cleanup.prewarmCallCount == 0)
+    }
+
     // MARK: Coordinator import discipline
 
     @Test("Coordinator imports only Foundation (no AVFoundation/Speech/FoundationModels/AppKit)")

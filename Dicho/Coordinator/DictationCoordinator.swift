@@ -130,6 +130,11 @@ final class DictationCoordinator {
     // MARK: - Private pipeline
 
     private func startRecording() async {
+        // Prewarm the FM session now so it's ready by the time cleanup is needed.
+        if !isRawMode {
+            cleanupService.prewarm()
+        }
+
         do {
             // TranscriptionEngine.start() must run first: it calls audioCapture.beginSession()
             // to register the AnalyzerInput continuation. startCapture() then captures that

@@ -12,6 +12,11 @@ import Foundation
 protocol CleanupServicing: AnyObject, Sendable {
     /// Cleans a single text chunk. Throws `CleanupError` on unavailability or timeout.
     func clean(_ text: String) async throws -> String
+
+    /// Creates a warm `LanguageModelSession` in preparation for the next dictation.
+    /// Call at recording start to reduce latency between stop and insertion.
+    /// No-op when Foundation Models is unavailable.
+    func prewarm()
 }
 
 /// Errors surfaced by `CleanupServicing` implementations.
