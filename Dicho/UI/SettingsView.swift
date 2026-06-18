@@ -137,15 +137,21 @@ struct SettingsView: View {
 
     private func refreshModelStatus() async {
         modelReady = nil
-        let preferred = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "en-US"))
-        let fallback  = await SpeechTranscriber.supportedLocale(equivalentTo: Locale.current)
-        guard let locale = preferred ?? fallback else {
+        // installedLocales only lists models already on-device; no locale reservations or
+        // other side-effects. assetInstallationRequest is not used here because it reserves
+        // locales automatically and returns non-nil even for an already-installed model when
+        // the app hasn't reserved that locale yet in the current session.
+        let installed = await SpeechTranscriber.installedLocales
+        guard !installed.isEmpty else {
             modelReady = false
             return
         }
-        let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
-        let request = try? await AssetInventory.assetInstallationRequest(supporting: [transcriber])
-        // nil request means no installation needed — model already present
-        modelReady = request == nil
+        let preferred = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "en-US"))
+        let fallback  = await SpeechTranscriber.supportedLocale(equivalentTo: Locale.current)
+        guard let target = preferred ?? fallback else {
+            modelReady = false
+            return
+        }
+        modelReady = installed.contains(target)
     }
 }
