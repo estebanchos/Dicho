@@ -5,6 +5,10 @@ enum HotkeyEvent: Sendable {
     case startRequested
     case stopRequested
     case cancelRequested
+    /// The CGEventTap was disabled and Accessibility trust is no longer granted.
+    /// The coordinator fires `.accessibilityPermissionMissing`; the app shell
+    /// opens onboarding in response.
+    case accessibilityRevoked
 }
 
 /// Protocol seam for global hotkey monitoring. Production type: `HotkeyMonitor`.

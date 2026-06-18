@@ -19,17 +19,20 @@ enum DictationNotice: Equatable, Sendable {
     case insertionFailed
     case audioCaptureFailed
     /// User attempted to record but microphone authorization is not granted.
-    /// Onboarding will offer the System Settings deep link in M6.
     case microphonePermissionMissing
+    /// The CGEventTap was silently disabled and Accessibility trust has been revoked.
+    /// The app shell opens the onboarding window in response to this notice.
+    case accessibilityPermissionMissing
 
     /// Single source of truth for the user-facing string each notice renders to.
     var displayText: String {
         switch self {
-        case .nothingHeard:                 return "Nothing heard"
-        case .cleanupUnavailable:           return "Cleanup unavailable"
-        case .insertionFailed:              return "Copied to clipboard — paste manually"
-        case .audioCaptureFailed:           return "Audio capture failed"
-        case .microphonePermissionMissing:  return "Microphone access required — open System Settings"
+        case .nothingHeard:                      return "Nothing heard"
+        case .cleanupUnavailable:                return "Cleanup unavailable"
+        case .insertionFailed:                   return "Copied to clipboard — paste manually"
+        case .audioCaptureFailed:                return "Audio capture failed"
+        case .microphonePermissionMissing:       return "Microphone access required — open System Settings"
+        case .accessibilityPermissionMissing:    return "Accessibility access required — open System Settings"
         }
     }
 }

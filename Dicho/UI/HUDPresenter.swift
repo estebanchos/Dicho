@@ -28,8 +28,8 @@ final class HUDPresenter {
 
     private let panel: NSPanel
 
-    init(coordinator: DictationCoordinator) {
-        let hudView = HUDView(coordinator: coordinator)
+    init(coordinator: DictationCoordinator, settings: AppSettings) {
+        let hudView = HUDView(coordinator: coordinator, settings: settings)
         let hosting = NSHostingView(rootView: hudView)
         // No Auto Layout constraints — we manage the panel size statically.
         hosting.sizingOptions = []
