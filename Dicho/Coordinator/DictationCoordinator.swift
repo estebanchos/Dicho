@@ -92,6 +92,10 @@ final class DictationCoordinator {
         case (.recording, .cancelRequested),
              (.transcribing, .cancelRequested):
             cancelRecording()
+        case (_, .accessibilityRevoked):
+            // Tap was silently disabled and AX trust is gone; surface via notice so
+            // the app shell can re-open onboarding without coupling to AppKit here.
+            fireNotice(.accessibilityPermissionMissing)
         default:
             break
         }

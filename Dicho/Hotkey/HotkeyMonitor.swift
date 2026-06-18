@@ -97,8 +97,13 @@ final class HotkeyMonitor: HotkeyMonitoring, @unchecked Sendable {
     fileprivate func handleRaw(type: CGEventType, event: CGEvent) {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
-            // The system may silence the tap under load. Re-enable so hotkeys keep working.
-            if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
+            // Re-enable if Accessibility is still trusted; yield the revoked event
+            // otherwise so the coordinator can surface onboarding.
+            if AXIsProcessTrustedWithOptions(nil) {
+                if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
+            } else {
+                continuation.yield(.accessibilityRevoked)
+            }
 
         case .flagsChanged:
             let hasCtrl = event.flags.contains(.maskControl)

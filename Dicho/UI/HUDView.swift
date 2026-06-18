@@ -1,18 +1,13 @@
 import SwiftUI
 
 /// Thin SwiftUI view rendered inside the floating HUD panel.
-/// Reads directly from `DictationCoordinator` — no business logic here.
+/// Reads directly from `DictationCoordinator` and `AppSettings` — no business logic here.
 struct HUDView: View {
 
     let coordinator: DictationCoordinator
+    let settings: AppSettings
 
     var body: some View {
-        // The card is built first (content + padding + material background +
-        // shadow). It sizes itself to the content. We then place it inside a
-        // flexible `.frame` matching the fixed panel area so the card is
-        // horizontally centered and bottom-anchored — this keeps the visual
-        // baseline stable across different card sizes (mic icon alone vs. a
-        // wrapping 3-line transcript vs. the notice text).
         content
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
@@ -31,10 +26,22 @@ struct HUDView: View {
                 Image(systemName: "mic.fill")
                     .foregroundStyle(.red)
                     .symbolEffect(.pulse)
-                recordingTranscript
-                    .font(.system(.body, design: .rounded))
-                    .lineLimit(3)
-                    .frame(maxWidth: 320, alignment: .leading)
+
+                if settings.hudStyle == .fullTranscript {
+                    recordingTranscript
+                        .font(.system(.body, design: .rounded))
+                        .lineLimit(3)
+                        .frame(maxWidth: 320, alignment: .leading)
+                }
+
+                if settings.isRawMode {
+                    Text("RAW")
+                        .font(.system(.caption2, design: .monospaced).bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(.orange, in: Capsule())
+                }
             }
         case .transcribing:
             HStack(spacing: 10) {
@@ -67,7 +74,7 @@ struct HUDView: View {
     @ViewBuilder
     private var recordingTranscript: some View {
         let finalized = coordinator.finalizedTranscript
-        let volatile = coordinator.volatileText
+        let volatile  = coordinator.volatileText
         if finalized.isEmpty && volatile.isEmpty {
             Text("Listening…")
                 .foregroundStyle(.secondary)

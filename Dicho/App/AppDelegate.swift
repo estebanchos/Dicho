@@ -1,11 +1,14 @@
 import AppKit
 import AVFoundation
 
-/// Application delegate. Owns the status item and the full dictation pipeline.
-/// Assembled here so `DictationCoordinator` and all production collaborators share
-/// the same lifetime as the process.
+/// Application delegate. Owns the status item, shared `AppSettings`, and the full
+/// dictation pipeline. `AppSettings` is created first so it can be injected into
+/// both the pipeline and the SwiftUI Settings/Onboarding windows.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+
+    // Exposed so DichoApp can wire Settings into the SwiftUI scene.
+    private(set) var settings = AppSettings()
 
     private var statusItem: NSStatusItem?
 
@@ -14,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var transcriptionEngine: TranscriptionEngine?
     private var coordinator: DictationCoordinator?
     private var hudPresenter: HUDPresenter?
+    private var onboardingController: OnboardingWindowController?
 
     private var accessibilityPollTimer: Timer?
 
@@ -22,12 +26,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         setupStatusItem()
+
+        onboardingController = OnboardingWindowController(settings: settings)
+
         requestMicPermission()
+
+        if shouldShowOnboarding() {
+            onboardingController?.show()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         coordinator?.stopListening()
         accessibilityPollTimer?.invalidate()
+    }
+
+    // MARK: - Onboarding gate
+
+    private func shouldShowOnboarding() -> Bool {
+        if !settings.hasCompletedOnboarding { return true }
+        let micOK = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        let axOK  = AXIsProcessTrustedWithOptions(nil)
+        return !micOK || !axOK
     }
 
     // MARK: - Status item
@@ -38,10 +58,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.image = NSImage(systemSymbolName: "mic", accessibilityDescription: "Dicho")
 
         let menu = NSMenu()
-        menu.addItem(
-            NSMenuItem(title: "Quit Dicho", action: #selector(quit), keyEquivalent: "q")
-        )
+        menu.delegate = self
+
+        let dictationItem = NSMenuItem(title: "Start Dictation", action: #selector(toggleDictation), keyEquivalent: "")
+        dictationItem.tag = 1
+        menu.addItem(dictationItem)
+
+        let rawItem = NSMenuItem(title: "Raw Mode", action: #selector(toggleRawMode), keyEquivalent: "")
+        rawItem.tag = 2
+        menu.addItem(rawItem)
+
+        menu.addItem(.separator())
+
+        menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ","))
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Quit Dicho", action: #selector(quit), keyEquivalent: "q"))
+
         statusItem?.menu = menu
+    }
+
+    // MARK: - Menu actions
+
+    @objc private func toggleDictation() {
+        guard let coordinator else { return }
+        Task {
+            switch coordinator.state {
+            case .idle:      await coordinator.handleHotkeyEvent(.startRequested)
+            case .recording: await coordinator.handleHotkeyEvent(.stopRequested)
+            default: break
+            }
+        }
+    }
+
+    @objc private func toggleRawMode() {
+        settings.isRawMode.toggle()
+    }
+
+    @objc private func openSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 
     @objc private func quit() {
@@ -50,20 +105,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Pipeline startup
 
-    /// Triggers the mic permission OS prompt (if undetermined) and then proceeds
-    /// to the Accessibility check / pipeline launch regardless of the result.
-    ///
-    /// Launching the pipeline unconditionally lets the hotkey monitor stay
-    /// active so the user gets feedback when they attempt to dictate without
-    /// mic permission — the coordinator surfaces
-    /// `DictationNotice.microphonePermissionMissing` in the HUD instead of
-    /// silently failing.
+    /// Requests the mic permission OS prompt (if undetermined) and proceeds to the
+    /// Accessibility check regardless of the result.
     private func requestMicPermission() {
         AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
             DispatchQueue.main.async {
 #if DEBUG
                 if !granted {
-                    print("[DEBUG] Microphone permission not granted — pipeline still starting; recording attempts will surface the notice")
+                    print("[DEBUG] Microphone permission not granted — pipeline still starting")
                 }
 #endif
                 self?.checkAccessibilityThenLaunch()
@@ -78,13 +127,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             launchPipeline()
             return
         }
-        NSWorkspace.shared.open(
-            // swiftlint:disable:next force_unwrapping
-            URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-        )
+        // If onboarding is showing it will guide the user; we still poll as a fallback.
 #if DEBUG
-        print("[DEBUG] Accessibility not granted — System Settings opened.")
-        print("[DEBUG] Add \(Bundle.main.bundlePath) and enable the toggle.")
+        print("[DEBUG] Accessibility not granted — waiting (onboarding should guide the user).")
 #endif
         accessibilityPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -96,31 +141,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Assembles all production types and starts the coordinator.
-    ///
-    /// M5: `isRawMode: false` — `CleanupService` is now wired with real
-    /// Foundation Models guided generation.
+    /// Assembles all production types, starts the coordinator, and begins observing
+    /// state so the status-item icon and menu stay in sync.
     private func launchPipeline() {
-        let audio = AudioCapture()
+        let audio        = AudioCapture()
         let transcription = TranscriptionEngine(audioCapture: audio)
-        let coordinator = DictationCoordinator(
+        let coordinator  = DictationCoordinator(
             hotkeyMonitor: HotkeyMonitor(),
             audioCapture: audio,
             transcriptionEngine: transcription,
             cleanupService: CleanupService(),
             textInserter: TextInserter(),
-            isRawMode: false
+            isRawMode: settings.isRawMode
         )
 
-        self.audioCapture = audio
+        self.audioCapture       = audio
         self.transcriptionEngine = transcription
-        self.coordinator = coordinator
-        self.hudPresenter = HUDPresenter(coordinator: coordinator)
+        self.coordinator        = coordinator
+        self.hudPresenter       = HUDPresenter(coordinator: coordinator, settings: settings)
 
         coordinator.startListening()
+        scheduleObservation()
 
 #if DEBUG
-        print("[DEBUG] Dicho M5 pipeline running — double-tap Ctrl to dictate (FM cleanup active)")
+        print("[DEBUG] Dicho M6 pipeline running — double-tap Ctrl to dictate")
 #endif
+    }
+
+    // MARK: - Observation
+
+    /// Recursively tracks `coordinator.state`, `settings.isRawMode`, and
+    /// `coordinator.activeNotice` so the status icon stays current and settings
+    /// changes propagate to the coordinator without coupling the two directly.
+    private func scheduleObservation() {
+        guard let coordinator else { return }
+        withObservationTracking {
+            // Keep coordinator's raw-mode flag in sync with settings.
+            coordinator.isRawMode = settings.isRawMode
+
+            // Reflect recording state in the status-item icon.
+            let isRecording = coordinator.state == .recording
+            statusItem?.button?.image = NSImage(
+                systemSymbolName: isRecording ? "mic.fill" : "mic",
+                accessibilityDescription: "Dicho"
+            )
+
+            // Open onboarding if the event tap signals Accessibility was revoked.
+            if coordinator.activeNotice == .accessibilityPermissionMissing {
+                onboardingController?.show()
+            }
+        } onChange: { [weak self] in
+            DispatchQueue.main.async { self?.scheduleObservation() }
+        }
+    }
+}
+
+// MARK: - NSMenuDelegate
+
+extension AppDelegate: NSMenuDelegate {
+    func menuWillOpen(_ menu: NSMenu) {
+        // Update Start/Stop title to reflect current pipeline state.
+        if let item = menu.item(withTag: 1) {
+            let isRecording = coordinator?.state == .recording
+            item.title = isRecording ? "Stop Dictation" : "Start Dictation"
+            item.isEnabled = coordinator != nil
+        }
+
+        // Update Raw Mode checkmark.
+        if let item = menu.item(withTag: 2) {
+            item.state = settings.isRawMode ? .on : .off
+        }
     }
 }

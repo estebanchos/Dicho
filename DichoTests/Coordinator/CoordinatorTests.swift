@@ -432,6 +432,34 @@ struct CoordinatorTests {
         #expect(cleanup.prewarmCallCount == 0)
     }
 
+    // MARK: Accessibility revocation (M6 edge-case hardening)
+
+    @Test("accessibilityRevoked event fires accessibilityPermissionMissing notice from idle")
+    func accessibilityRevokedFiresNotice() async {
+        let (coordinator, _, _, _, _) = makeCoordinator()
+        var notices: [DictationNotice] = []
+        coordinator.onNotice = { notices.append($0) }
+
+        await coordinator.handleHotkeyEvent(.accessibilityRevoked)
+
+        #expect(notices.contains(.accessibilityPermissionMissing))
+        #expect(coordinator.activeNotice == .accessibilityPermissionMissing)
+    }
+
+    @Test("accessibilityRevoked during recording fires notice and leaves state unchanged")
+    func accessibilityRevokedDuringRecordingFiresNotice() async {
+        let (coordinator, _, _, _, _) = makeCoordinator()
+        var notices: [DictationNotice] = []
+        coordinator.onNotice = { notices.append($0) }
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        #expect(coordinator.state == .recording)
+
+        await coordinator.handleHotkeyEvent(.accessibilityRevoked)
+
+        #expect(notices.contains(.accessibilityPermissionMissing))
+    }
+
     // MARK: Coordinator import discipline
 
     @Test("Coordinator imports only Foundation (no AVFoundation/Speech/FoundationModels/AppKit)")
