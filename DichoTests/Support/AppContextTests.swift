@@ -3,6 +3,7 @@ import Testing
 @testable import Dicho
 
 @Suite("AppContext — value-type contract")
+@MainActor
 struct AppContextTests {
 
     @Test("Two AppContext values with identical fields are equal")
