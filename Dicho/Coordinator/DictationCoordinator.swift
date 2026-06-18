@@ -223,7 +223,7 @@ final class DictationCoordinator {
         let textToInsert: String
         do {
             textToInsert = try await withCleanupTimeout {
-                try await self.cleanupService.clean(transcript)
+                try await self.cleanupService.clean(transcript, appContext: nil)
             }
         } catch CleanupError.unavailable {
             textToInsert = transcript

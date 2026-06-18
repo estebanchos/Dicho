@@ -10,12 +10,22 @@ import Foundation
 /// the implementation must throw `CleanupError.unavailable` so the coordinator
 /// can fall back to the raw transcript.
 protocol CleanupServicing: AnyObject, Sendable {
-    /// Cleans a single text chunk. Throws `CleanupError` on unavailability or timeout.
-    func clean(_ text: String) async throws -> String
+    /// Cleans a transcript. Throws `CleanupError` on unavailability or timeout.
+    ///
+    /// `appContext` is captured by the coordinator at stop time. When non-nil and
+    /// its category has an associated hint (anything other than `.generalWriting`),
+    /// implementations append the hint to the session instructions to bias cleanup
+    /// for the target app. The forbidden-actions contract is never overridden.
+    func clean(_ text: String, appContext: AppContext?) async throws -> String
 
     /// Creates a warm `LanguageModelSession` in preparation for the next dictation.
     /// Call at recording start to reduce latency between stop and insertion.
     /// No-op when Foundation Models is unavailable.
+    ///
+    /// Prewarm runs before the user has finished speaking, so the app context is
+    /// not yet known; implementations should build a no-context (baseline) session.
+    /// `clean(_:appContext:)` rebuilds the session if context-aware instructions
+    /// are needed by the time the transcript arrives.
     func prewarm()
 }
 

@@ -27,21 +27,31 @@ final class CleanupService: CleanupServicing {
         pendingSession = session
     }
 
-    func clean(_ text: String) async throws -> String {
+    func clean(_ text: String, appContext: AppContext?) async throws -> String {
         guard case .available = SystemLanguageModel.default.availability else {
             throw CleanupError.unavailable
         }
 
         let chunks = Self.splitIntoChunks(text)
         var cleaned: [String] = []
+        // Prewarm built a baseline (no-hint) session; if the appContext implies a
+        // hint, the prewarmed instructions are stale and we discard it.
+        let needsContextAwareSession = Self.hint(for: appContext?.category ?? .generalWriting) != nil
 
         for (index, chunk) in chunks.enumerated() {
             let session: LanguageModelSession
-            if index == 0, let pending = pendingSession {
-                session = pending
-                pendingSession = nil
+            if index == 0 {
+                if needsContextAwareSession {
+                    session = makeSession(appContext: appContext)
+                    pendingSession = nil
+                } else if let pending = pendingSession {
+                    session = pending
+                    pendingSession = nil
+                } else {
+                    session = makeSession()
+                }
             } else {
-                session = makeSession()
+                session = makeSession(appContext: appContext)
             }
             let response = try await session.respond(
                 to: Self.buildPrompt(for: chunk),
@@ -164,7 +174,7 @@ final class CleanupService: CleanupServicing {
 
     // MARK: - Private
 
-    private func makeSession() -> LanguageModelSession {
-        LanguageModelSession(instructions: Self.buildInstructions())
+    private func makeSession(appContext: AppContext? = nil) -> LanguageModelSession {
+        LanguageModelSession(instructions: Self.buildInstructions(for: appContext))
     }
 }
