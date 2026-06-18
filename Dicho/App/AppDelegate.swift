@@ -7,7 +7,6 @@ import AVFoundation
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    // Exposed so DichoApp can wire Settings into the SwiftUI scene.
     private(set) var settings = AppSettings()
 
     private var statusItem: NSStatusItem?
@@ -18,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var coordinator: DictationCoordinator?
     private var hudPresenter: HUDPresenter?
     private var onboardingController: OnboardingWindowController?
+    private var settingsWindowController: SettingsWindowController?
 
     private var accessibilityPollTimer: Timer?
 
@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupStatusItem()
 
         onboardingController = OnboardingWindowController(settings: settings)
+        settingsWindowController = SettingsWindowController(settings: settings)
 
         requestMicPermission()
 
@@ -61,18 +62,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.delegate = self
 
         let dictationItem = NSMenuItem(title: "Start Dictation", action: #selector(toggleDictation), keyEquivalent: "")
+        dictationItem.target = self
         dictationItem.tag = 1
         menu.addItem(dictationItem)
 
         let rawItem = NSMenuItem(title: "Raw Mode", action: #selector(toggleRawMode), keyEquivalent: "")
+        rawItem.target = self
         rawItem.tag = 2
         menu.addItem(rawItem)
 
         menu.addItem(.separator())
 
-        menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ","))
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Dicho", action: #selector(quit), keyEquivalent: "q"))
+
+        let quitItem = NSMenuItem(title: "Quit Dicho", action: #selector(quit), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
 
         statusItem?.menu = menu
     }
@@ -95,8 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        settingsWindowController?.show()
     }
 
     @objc private func quit() {
