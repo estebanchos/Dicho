@@ -98,9 +98,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Assembles all production types and starts the coordinator.
     ///
-    /// `isRawMode: true` continues to bypass cleanup until `CleanupService` is
-    /// implemented in M5. `TextInserter` is the real pasteboard + Cmd+V impl
-    /// from M4; the raw transcript pastes at the cursor on stop.
+    /// M5: `isRawMode: false` — `CleanupService` is now wired with real
+    /// Foundation Models guided generation.
     private func launchPipeline() {
         let audio = AudioCapture()
         let transcription = TranscriptionEngine(audioCapture: audio)
@@ -110,7 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             transcriptionEngine: transcription,
             cleanupService: CleanupService(),
             textInserter: TextInserter(),
-            isRawMode: true
+            isRawMode: false
         )
 
         self.audioCapture = audio
@@ -121,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         coordinator.startListening()
 
 #if DEBUG
-        print("[DEBUG] Dicho M4 pipeline running — double-tap Ctrl to dictate")
+        print("[DEBUG] Dicho M5 pipeline running — double-tap Ctrl to dictate (FM cleanup active)")
 #endif
     }
 }
