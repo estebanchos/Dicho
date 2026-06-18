@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import SwiftUI
 
 /// Application delegate. Owns the status item, shared `AppSettings`, and the full
 /// dictation pipeline. `AppSettings` is created first so it can be injected into
@@ -17,7 +18,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var coordinator: DictationCoordinator?
     private var hudPresenter: HUDPresenter?
     private var onboardingController: OnboardingWindowController?
-    private var settingsWindowController: SettingsWindowController?
+    private lazy var settingsScene = NSHostingSceneRepresentation {
+        Settings {
+            SettingsView(settings: self.settings)
+        }
+    }
 
     private var accessibilityPollTimer: Timer?
 
@@ -28,7 +33,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupStatusItem()
 
         onboardingController = OnboardingWindowController(settings: settings)
-        settingsWindowController = SettingsWindowController(settings: settings)
 
         requestMicPermission()
 
@@ -103,7 +107,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
-        settingsWindowController?.show()
+        NSApp.activate(ignoringOtherApps: true)
+        settingsScene.environment.openSettings()
     }
 
     @objc private func quit() {
