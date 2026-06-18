@@ -116,4 +116,86 @@ struct CleanupServiceTests {
         let chunks = CleanupService.splitIntoChunks(text)
         #expect(chunks.allSatisfy { $0.count <= charBudget })
     }
+
+    // MARK: - Target-app hint (7.3)
+
+    @Test("hint(for: .generalWriting) returns nil so the prompt stays at baseline")
+    func generalWritingProducesNoHint() {
+        #expect(CleanupService.hint(for: .generalWriting) == nil)
+    }
+
+    @Test("Every non-default category produces a non-empty hint")
+    func everyMeaningfulCategoryHasAHint() {
+        for category in AppCategory.allCases where category != .generalWriting {
+            let h = CleanupService.hint(for: category)
+            #expect(h != nil, "expected non-nil hint for \(category)")
+            #expect(h?.isEmpty == false)
+        }
+    }
+
+    @Test("buildInstructions() with no arg matches the .generalWriting / nil-context baseline")
+    func baselineEquivalences() {
+        let none = CleanupService.buildInstructions()
+        let nilCtx = CleanupService.buildInstructions(for: nil)
+        let general = CleanupService.buildInstructions(
+            for: AppContext(bundleIdentifier: nil, localizedName: nil, category: .generalWriting)
+        )
+        #expect(none == nilCtx)
+        #expect(none == general)
+    }
+
+    @Test(
+        "Category-specific instructions contain a distinguishing keyword from the hint",
+        arguments: [
+            (AppCategory.ide, "code editor"),
+            (.terminal, "terminal"),
+            (.messaging, "informal"),
+            (.email, "email"),
+            (.browser, "browser"),
+            (.notes, "notes"),
+            (.scriptWriting, "screenwriting"),
+            (.filmEditing, "video/film"),
+        ]
+    )
+    func categoryInstructionsContainKeyword(_ pair: (AppCategory, String)) {
+        let (category, keyword) = pair
+        let ctx = AppContext(bundleIdentifier: "x", localizedName: "x", category: category)
+        let instructions = CleanupService.buildInstructions(for: ctx)
+        #expect(instructions.localizedCaseInsensitiveContains(keyword))
+    }
+
+    @Test("Forbidden-actions block is preserved when a hint is appended")
+    func forbiddenActionsPreservedWithHint() {
+        let ide = AppContext(bundleIdentifier: "x", localizedName: "x", category: .ide)
+        let instructions = CleanupService.buildInstructions(for: ide)
+        // The same five forbidden keywords from the M5 contract must still be present.
+        #expect(instructions.localizedCaseInsensitiveContains("paraphrase"))
+        #expect(
+            instructions.localizedCaseInsensitiveContains("summarize") ||
+            instructions.localizedCaseInsensitiveContains("summary")
+        )
+        #expect(
+            instructions.localizedCaseInsensitiveContains("identifier") ||
+            instructions.localizedCaseInsensitiveContains("technical")
+        )
+        #expect(
+            instructions.localizedCaseInsensitiveContains("commentary") ||
+            instructions.localizedCaseInsensitiveContains("explanation") ||
+            instructions.localizedCaseInsensitiveContains("preamble")
+        )
+    }
+
+    @Test("Hint sits AFTER the FORBIDDEN block so it cannot override the contract")
+    func hintFollowsForbiddenBlock() {
+        let ide = AppContext(bundleIdentifier: "x", localizedName: "x", category: .ide)
+        let instructions = CleanupService.buildInstructions(for: ide)
+        guard
+            let forbiddenRange = instructions.range(of: "FORBIDDEN", options: .caseInsensitive),
+            let hintRange = instructions.range(of: "code editor", options: .caseInsensitive)
+        else {
+            Issue.record("Expected both FORBIDDEN and hint text in the instructions")
+            return
+        }
+        #expect(forbiddenRange.lowerBound < hintRange.lowerBound)
+    }
 }

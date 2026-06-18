@@ -55,10 +55,13 @@ final class CleanupService: CleanupServicing {
 
     // MARK: - Internal — exposed for golden-file tests
 
-    /// System instructions baked into every session.
+    /// System instructions baked into every session. When `appContext` is non-nil
+    /// and its category has a hint (i.e. anything other than `.generalWriting`),
+    /// the hint is appended AFTER the forbidden-actions block so it cannot
+    /// override the core contract.
     /// Tested via `CleanupServiceTests` without live model calls.
-    static func buildInstructions() -> String {
-        """
+    static func buildInstructions(for appContext: AppContext? = nil) -> String {
+        let base = """
         You are a dictation-cleanup assistant. Clean the transcript by:
         - Removing filler words (um, uh, like when used as a filler, you know, etc.)
         - Applying explicit self-corrections: if the speaker says \
@@ -69,6 +72,46 @@ final class CleanupService: CleanupServicing {
         or alter any identifiers, numbers, URLs, code, or technical terms. \
         Output ONLY the cleaned text with no commentary, preamble, or explanation.
         """
+        guard let hint = appContext.flatMap({ Self.hint(for: $0.category) }) else {
+            return base
+        }
+        return base + "\n\n" + hint
+    }
+
+    /// One-sentence target-app hint appended to the instructions. Returns `nil`
+    /// for `.generalWriting` so the prompt remains identical to the no-context
+    /// baseline when the frontmost app doesn't match any known category.
+    static func hint(for category: AppCategory) -> String? {
+        switch category {
+        case .ide:
+            return "The user is dictating into a code editor; preserve any token "
+                + "that looks like an identifier (camelCase, snake_case, dotted, or "
+                + "punctuated), URL, file path, or number exactly as transcribed."
+        case .terminal:
+            return "The user is dictating into a terminal; preserve commands, "
+                + "flags, paths, and shell punctuation exactly as transcribed."
+        case .messaging:
+            return "The user is dictating an informal message; light contractions "
+                + "are acceptable but do not change register or formality."
+        case .email:
+            return "The user is dictating an email body; standard sentence "
+                + "structure and capitalization are appropriate."
+        case .browser:
+            return "The user is dictating into a browser text area; apply default cleanup."
+        case .notes:
+            return "The user is dictating notes; brief, fragmentary phrasing is acceptable."
+        case .scriptWriting:
+            return "The user is dictating into a screenwriting app; preserve scene "
+                + "headings (e.g. INT./EXT.), character names (often ALL CAPS), "
+                + "parentheticals, transitions (CUT TO:, FADE OUT.), and standard "
+                + "screenplay/Fountain formatting exactly as transcribed."
+        case .filmEditing:
+            return "The user is dictating into a video/film editing app; preserve "
+                + "clip names, timecodes (HH:MM:SS:FF), keyboard shortcuts, and "
+                + "numeric markers exactly as transcribed."
+        case .generalWriting:
+            return nil
+        }
     }
 
     /// Wraps a transcript chunk in the per-request prompt.
