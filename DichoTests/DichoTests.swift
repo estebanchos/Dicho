@@ -6,7 +6,7 @@ import Testing
 @Suite("M0 Scaffold")
 struct ScaffoldTests {
 
-    @Test("All five protocol seams are declared and accessible")
+    @Test("All protocol seams are declared and accessible")
     func protocolSeamsAreDeclared() {
         // Compile-time proof: if any seam type is missing this file won't build.
         let _: (any HotkeyMonitoring)? = nil
@@ -14,6 +14,7 @@ struct ScaffoldTests {
         let _: (any TranscriptionEngineProtocol)? = nil
         let _: (any CleanupServicing)? = nil
         let _: (any TextInserting)? = nil
+        let _: (any ActiveAppProviding)? = nil
         #expect(Bool(true))
     }
 
