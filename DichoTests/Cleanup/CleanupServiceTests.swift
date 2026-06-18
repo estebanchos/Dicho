@@ -3,6 +3,7 @@ import Testing
 @testable import Dicho
 
 @Suite("CleanupService — prompt construction (golden-file, no live model)")
+@MainActor
 struct CleanupServiceTests {
 
     // MARK: - Instructions structure

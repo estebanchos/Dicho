@@ -2,6 +2,7 @@ import Testing
 @testable import Dicho
 
 @Suite("TapClassifier")
+@MainActor
 struct TapClassifierTests {
 
     // MARK: - Initial state
