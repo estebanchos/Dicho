@@ -186,6 +186,15 @@ final class DictationCoordinator {
         // turn; this is the closest moment to the user's hotkey-press intent.
         // Raw mode bypasses cleanup, so the capture is skipped.
         let appContext: AppContext? = isRawMode ? nil : activeAppProvider?.currentApp()
+#if DEBUG
+        let categoryDesc = appContext.map { String(describing: $0.category) } ?? "nil"
+        print(
+            "[DEBUG] AppContext captured at stop: "
+            + "bundleID=\(appContext?.bundleIdentifier ?? "nil") "
+            + "name=\(appContext?.localizedName ?? "nil") "
+            + "category=\(categoryDesc)"
+        )
+#endif
 
         // Keep transcriptTask alive during stop(): the engine finalizes volatile results
         // and finishes the updates stream inside stop(). transcriptTask then drains the
