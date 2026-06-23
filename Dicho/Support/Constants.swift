@@ -25,4 +25,13 @@ enum Constants {
     /// Long enough to read status and error messages ("Cleanup unavailable",
     /// "Microphone permission missing"); short enough not to linger.
     static let noticeDisplayDuration: TimeInterval = 4.0
+
+    /// Minimum word count required for `CleanupService.clean(_:appContext:)`
+    /// to invoke the model. Shorter inputs are passed through unchanged.
+    /// Observed during M7 manual verification: the on-device Foundation Models
+    /// model occasionally echoes its own guided-generation system prompt
+    /// (`"response format ... schema: { name: CleanedText ..."`) when given a
+    /// single-token input. Single-word inputs barely benefit from cleanup,
+    /// so the trade-off is favorable.
+    static let cleanupMinWordsForCleanup: Int = 2
 }

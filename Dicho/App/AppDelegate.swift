@@ -164,6 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             transcriptionEngine: transcription,
             cleanupService: CleanupService(),
             textInserter: TextInserter(),
+            activeAppProvider: ActiveAppProvider(),
             isRawMode: settings.isRawMode
         )
 
@@ -176,7 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduleObservation()
 
 #if DEBUG
-        print("[DEBUG] Dicho M6 pipeline running — double-tap Ctrl to dictate")
+        print("[DEBUG] Dicho M7 pipeline running — double-tap Ctrl to dictate (target-app context active)")
 #endif
     }
 

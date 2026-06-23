@@ -37,6 +37,7 @@ final class DictationCoordinator {
     private let transcriptionEngine: any TranscriptionEngineProtocol
     private let cleanupService: any CleanupServicing
     private let textInserter: any TextInserting
+    private let activeAppProvider: (any ActiveAppProviding)?
 
     // MARK: - Internal pipeline state
 
@@ -53,6 +54,7 @@ final class DictationCoordinator {
         transcriptionEngine: any TranscriptionEngineProtocol,
         cleanupService: any CleanupServicing,
         textInserter: any TextInserting,
+        activeAppProvider: (any ActiveAppProviding)? = nil,
         isRawMode: Bool = false
     ) {
         self.hotkeyMonitor = hotkeyMonitor
@@ -60,6 +62,7 @@ final class DictationCoordinator {
         self.transcriptionEngine = transcriptionEngine
         self.cleanupService = cleanupService
         self.textInserter = textInserter
+        self.activeAppProvider = activeAppProvider
         self.isRawMode = isRawMode
     }
 
@@ -177,6 +180,22 @@ final class DictationCoordinator {
         audioCapture.stopCapture()
         audioCaptureErrorTask?.cancel()
         audioCaptureErrorTask = nil
+
+        // Capture frontmost-app context BEFORE any await. NSRunningApplication's
+        // time-varying properties are only fresh within the current main-run-loop
+        // turn; this is the closest moment to the user's hotkey-press intent.
+        // Raw mode bypasses cleanup, so the capture is skipped.
+        let appContext: AppContext? = isRawMode ? nil : activeAppProvider?.currentApp()
+#if DEBUG
+        let categoryDesc = appContext.map { String(describing: $0.category) } ?? "nil"
+        print(
+            "[DEBUG] AppContext captured at stop: "
+            + "bundleID=\(appContext?.bundleIdentifier ?? "nil") "
+            + "name=\(appContext?.localizedName ?? "nil") "
+            + "category=\(categoryDesc)"
+        )
+#endif
+
         // Keep transcriptTask alive during stop(): the engine finalizes volatile results
         // and finishes the updates stream inside stop(). transcriptTask then drains the
         // final results (calling handleTranscriptUpdate) and exits naturally.
@@ -196,7 +215,7 @@ final class DictationCoordinator {
             return
         }
 
-        await processTranscript(transcript)
+        await processTranscript(transcript, appContext: appContext)
     }
 
     private func cancelRecording() {
@@ -212,7 +231,7 @@ final class DictationCoordinator {
         Task { [transcriptionEngine] in await transcriptionEngine.stop() }
     }
 
-    private func processTranscript(_ transcript: String) async {
+    private func processTranscript(_ transcript: String, appContext: AppContext?) async {
         guard !isRawMode else {
             await insertText(transcript)
             return
@@ -223,7 +242,7 @@ final class DictationCoordinator {
         let textToInsert: String
         do {
             textToInsert = try await withCleanupTimeout {
-                try await self.cleanupService.clean(transcript)
+                try await self.cleanupService.clean(transcript, appContext: appContext)
             }
         } catch CleanupError.unavailable {
             textToInsert = transcript

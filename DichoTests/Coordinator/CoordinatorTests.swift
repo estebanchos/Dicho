@@ -27,6 +27,29 @@ private func makeCoordinator(rawMode: Bool = false) -> (
     return (coordinator, audio, transcription, cleanup, insertion)
 }
 
+@MainActor
+private func makeCoordinatorWithProvider(
+    rawMode: Bool = false,
+    provider: FakeActiveAppProvider
+) -> (
+    coordinator: DictationCoordinator,
+    cleanup: FakeCleanupService,
+    insertion: FakeTextInserter
+) {
+    let cleanup = FakeCleanupService()
+    let insertion = FakeTextInserter()
+    let coordinator = DictationCoordinator(
+        hotkeyMonitor: FakeHotkeyMonitor(),
+        audioCapture: FakeAudioCapture(),
+        transcriptionEngine: FakeTranscriptionEngine(),
+        cleanupService: cleanup,
+        textInserter: insertion,
+        activeAppProvider: provider,
+        isRawMode: rawMode
+    )
+    return (coordinator, cleanup, insertion)
+}
+
 // MARK: - Suite
 
 @Suite("DictationCoordinator")
@@ -458,6 +481,86 @@ struct CoordinatorTests {
         await coordinator.handleHotkeyEvent(.accessibilityRevoked)
 
         #expect(notices.contains(.accessibilityPermissionMissing))
+    }
+
+    // MARK: Target-app context capture (M7.5)
+
+    @Test("Stop in non-raw mode invokes activeAppProvider.currentApp() exactly once")
+    func activeAppProviderInvokedOnStop() async {
+        let provider = FakeActiveAppProvider()
+        provider.stubbedContext = AppContext(
+            bundleIdentifier: "com.apple.dt.Xcode",
+            localizedName: "Xcode",
+            category: .ide
+        )
+        let (coordinator, _, _) = makeCoordinatorWithProvider(provider: provider)
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "hello", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(provider.currentAppCallCount == 1)
+    }
+
+    @Test("Captured AppContext is forwarded into cleanupService.clean")
+    func capturedContextForwardedToCleanup() async {
+        let provider = FakeActiveAppProvider()
+        let expected = AppContext(
+            bundleIdentifier: "com.apple.dt.Xcode",
+            localizedName: "Xcode",
+            category: .ide
+        )
+        provider.stubbedContext = expected
+        let (coordinator, cleanup, _) = makeCoordinatorWithProvider(provider: provider)
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "hello", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(cleanup.lastAppContext == expected)
+    }
+
+    @Test("Raw mode skips activeAppProvider invocation entirely")
+    func rawModeSkipsActiveAppProvider() async {
+        let provider = FakeActiveAppProvider()
+        provider.stubbedContext = AppContext(bundleIdentifier: "x", localizedName: "x", category: .ide)
+        let (coordinator, _, _) = makeCoordinatorWithProvider(rawMode: true, provider: provider)
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "hello", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(provider.currentAppCallCount == 0)
+    }
+
+    @Test("Provider returning nil still produces a successful cleanup call with appContext: nil")
+    func providerReturningNilForwardsNil() async {
+        let provider = FakeActiveAppProvider()
+        provider.stubbedContext = nil
+        let (coordinator, cleanup, insertion) = makeCoordinatorWithProvider(provider: provider)
+        cleanup.stubbedResult = "cleaned text"
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "hello", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(provider.currentAppCallCount == 1)
+        #expect(cleanup.lastAppContext == nil)
+        #expect(cleanup.cleanCallCount == 1)
+        #expect(insertion.insertedText == "cleaned text")
+    }
+
+    @Test("Coordinator without an injected provider passes appContext: nil to cleanup")
+    func missingProviderDefaultsToNil() async {
+        // Reuses the existing makeCoordinator helper (no provider injected).
+        let (coordinator, _, _, cleanup, _) = makeCoordinator()
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "hello", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(cleanup.cleanCallCount == 1)
+        #expect(cleanup.lastAppContext == nil)
     }
 
     // MARK: Coordinator import discipline
