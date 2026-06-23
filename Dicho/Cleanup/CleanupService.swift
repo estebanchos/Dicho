@@ -32,6 +32,13 @@ final class CleanupService: CleanupServicing {
             throw CleanupError.unavailable
         }
 
+        // Short-input bypass: very short inputs (single tokens / abbreviations)
+        // are where the on-device model is most likely to hallucinate or echo
+        // its own system prompt, and cleanup barely helps anyway.
+        if Self.shouldBypassCleanup(for: text) {
+            return text
+        }
+
         let chunks = Self.splitIntoChunks(text)
         var cleaned: [String] = []
         // Prewarm built a baseline (no-hint) session; if the appContext implies a
@@ -57,7 +64,11 @@ final class CleanupService: CleanupServicing {
                 to: Self.buildPrompt(for: chunk),
                 generating: CleanedText.self
             )
-            cleaned.append(response.content.text)
+            let cleanedChunk = response.content.text
+            // Defensive: if the model echoed its guided-generation schema or
+            // any other system-prompt artifact, fall back to the raw chunk
+            // rather than insert garbage into the user's document.
+            cleaned.append(Self.isLikelyModelLeakage(cleanedChunk) ? chunk : cleanedChunk)
         }
 
         return cleaned.joined(separator: " ")
@@ -118,10 +129,14 @@ final class CleanupService: CleanupServicing {
         case .notes:
             return "The user is dictating notes; brief, fragmentary phrasing is acceptable."
         case .scriptWriting:
-            return "The user is dictating into a screenwriting app; preserve scene "
-                + "headings (e.g. INT./EXT.), character names (often ALL CAPS), "
-                + "parentheticals, transitions (CUT TO:, FADE OUT.), and standard "
-                + "screenplay/Fountain formatting exactly as transcribed."
+            return "The user is dictating into a screenwriting app. Preserve "
+                + "*formatting tokens* exactly as transcribed: scene headings "
+                + "(INT./EXT.), character names (often ALL CAPS), parentheticals, "
+                + "transitions (CUT TO:, FADE OUT.), and other standard "
+                + "screenplay/Fountain markers. Dialogue and scene description "
+                + "are ordinary prose — still apply the same filler removal, "
+                + "self-correction, and light punctuation rules from the base "
+                + "instructions to those passages."
         case .filmEditing:
             return "The user is dictating into a video/film editing app; preserve "
                 + "clip names, timecodes (HH:MM:SS:FF), keyboard shortcuts, and "
@@ -134,6 +149,45 @@ final class CleanupService: CleanupServicing {
     /// Wraps a transcript chunk in the per-request prompt.
     static func buildPrompt(for text: String) -> String {
         "Clean this dictation transcript:\n\(text)"
+    }
+
+    /// Returns `true` when the input is too short to be worth invoking the model
+    /// on, in which case `clean(_:appContext:)` will pass it through unchanged.
+    /// Threshold: fewer than `Constants.cleanupMinWordsForCleanup` words after
+    /// trimming surrounding whitespace.
+    ///
+    /// Rationale: on-device Foundation Models occasionally produces hallucinated
+    /// schema-leakage output for single-token inputs (see `isLikelyModelLeakage`),
+    /// and the cleanup payoff for one-word inputs is negligible.
+    static func shouldBypassCleanup(for text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return true }
+        let wordCount = trimmed.split(whereSeparator: { $0.isWhitespace }).count
+        return wordCount < Constants.cleanupMinWordsForCleanup
+    }
+
+    /// Returns `true` when `text` looks like the on-device Foundation Models
+    /// model echoed its guided-generation system prompt instead of producing
+    /// a clean response. The cleanup pipeline falls back to the raw chunk when
+    /// this detector fires, so corrupted output never reaches the user's document.
+    ///
+    /// Observed M7 manual-test leakage (2026-06-23):
+    ///   Input "INT" → output  `"INT.\nresponse format in json. name: CleanedText schema: {"`
+    ///
+    /// Detection is intentionally narrow: case-insensitive substring checks
+    /// against patterns that are vanishingly unlikely in legitimate dictation
+    /// (`"response format"`, `"schema:"`, `"name: CleanedText"`, `@Generable`,
+    /// `@Guide`). A genuine sentence about "JSON schemas" or about a person
+    /// named "CleanedText" would survive without false positives.
+    static func isLikelyModelLeakage(_ text: String) -> Bool {
+        let leakageMarkers = [
+            "response format",
+            "schema:",
+            "name: CleanedText",
+            "@Generable",
+            "@Guide",
+        ]
+        return leakageMarkers.contains { text.localizedCaseInsensitiveContains($0) }
     }
 
     /// Splits `text` into chunks that each fit within the token budget.
@@ -185,5 +239,6 @@ final class CleanupService: CleanupServicing {
         LanguageModelSession(instructions: Self.buildInstructions(for: appContext))
     }
 }
+
 
 
