@@ -84,10 +84,15 @@ final class CleanupService: CleanupServicing {
     static func buildInstructions(for appContext: AppContext? = nil) -> String {
         let base = """
         You are a dictation-cleanup assistant. Clean the transcript by:
-        - Removing filler words (um, uh, like when used as a filler, you know, etc.)
-        - Applying explicit self-corrections: if the speaker says \
-        "Tuesday — no wait, Friday", output "Friday"
-        - Adding light punctuation (commas, periods) and standard capitalization
+        - Removing filler words (um, uhm, uh, er, ah, hmm, "like" when used as a filler, \
+        "you know", and similar hesitation markers).
+        - Applying explicit self-corrections. When the speaker marks a correction with one \
+        of these phrases, output ONLY the replacement and drop the abandoned phrase before it:
+            • "X — no wait, Y" → "Y"  (e.g. "Tuesday — no wait, Friday" → "Friday")
+            • "X, scratch that, Y" → "Y"  (e.g. "buy milk, scratch that, buy bread" → "buy bread")
+            • "X, correction, Y" → "Y"  (e.g. "the meeting is Tuesday, correction, \
+        the meeting is Wednesday" → "the meeting is Wednesday")
+        - Adding light punctuation (commas, periods) and standard capitalization.
 
         FORBIDDEN: Do NOT paraphrase, summarize, translate, change register or tone, \
         or alter any identifiers, numbers, URLs, code, or technical terms. \

@@ -287,4 +287,44 @@ struct CleanupServiceTests {
     func allowsCleanText(_ text: String) {
         #expect(!CleanupService.isLikelyModelLeakage(text))
     }
+
+    // MARK: - Expanded filler / self-correction examples (M7 post-verification, 2026-06-23)
+
+    @Test(
+        "Instructions list the expanded hesitation-filler vocabulary",
+        arguments: ["um", "uhm", "uh", "er", "ah", "hmm"]
+    )
+    func instructionsListExpandedFillers(_ filler: String) {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains(filler))
+    }
+
+    @Test("Instructions explicitly list 'scratch that' as a self-correction marker")
+    func instructionsListScratchThat() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("scratch that"))
+    }
+
+    @Test("Instructions explicitly list 'correction' as a self-correction marker")
+    func instructionsListCorrectionKeyword() {
+        let instructions = CleanupService.buildInstructions()
+        // Stronger than the existing 'self-correction' check: requires the bare
+        // marker word 'correction' (the deliberate trigger) to appear, not just
+        // the compound 'self-correction'.
+        let lower = instructions.lowercased()
+        // Search for "correction" preceded by whitespace/punctuation so the
+        // match isn't satisfied solely by "self-correction".
+        let asWord = lower.contains(", correction,") || lower.contains(" correction,")
+            || lower.contains("correction\"") || lower.contains("\"correction")
+        #expect(asWord)
+    }
+
+    @Test("Self-correction worked examples remain in the instructions")
+    func instructionsKeepOriginalSelfCorrectionExample() {
+        // The "Tuesday — no wait, Friday" example is the canonical pattern;
+        // it should survive the expansion.
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("no wait"))
+        #expect(instructions.localizedCaseInsensitiveContains("Friday"))
+    }
 }
