@@ -33,6 +33,10 @@
 		C41E70902FDB3E870005E429 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
 		C41E70AB2FDB4E8E0005E429 /* JOURNAL.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = JOURNAL.md; sourceTree = "<group>"; };
 		C41E70AC2FDB4FE90005E429 /* RESTART_AGENT.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = RESTART_AGENT.md; sourceTree = "<group>"; };
+		C48587E52FEB1A2A000AD820 /* EXPANDED_DEVICES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = EXPANDED_DEVICES.md; sourceTree = "<group>"; };
+		C48587E62FEB1A3A000AD820 /* LANGUAGE_IMPLEMENTATION.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = LANGUAGE_IMPLEMENTATION.md; sourceTree = "<group>"; };
+		C48587E72FEB1A51000AD820 /* OPTIMIZATIONS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = OPTIMIZATIONS.md; sourceTree = "<group>"; };
+		C48587E82FEB1A56000AD820 /* SNIPPETS_FEATURE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = SNIPPETS_FEATURE.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -103,6 +107,7 @@
 		C41E708C2FDB3DFA0005E429 /* Documentation */ = {
 			isa = PBXGroup;
 			children = (
+				C48587E42FEB19FE000AD820 /* day 2 */,
 				C41E70AC2FDB4FE90005E429 /* RESTART_AGENT.md */,
 				C41E708D2FDB3E7A0005E429 /* ARCHITECTURE.md */,
 				C41E708E2FDB3E7A0005E429 /* PRODUCT_SPEC.md */,
@@ -110,6 +115,17 @@
 				C41E70AB2FDB4E8E0005E429 /* JOURNAL.md */,
 			);
 			path = Documentation;
+			sourceTree = "<group>";
+		};
+		C48587E42FEB19FE000AD820 /* day 2 */ = {
+			isa = PBXGroup;
+			children = (
+				C48587E52FEB1A2A000AD820 /* EXPANDED_DEVICES.md */,
+				C48587E62FEB1A3A000AD820 /* LANGUAGE_IMPLEMENTATION.md */,
+				C48587E72FEB1A51000AD820 /* OPTIMIZATIONS.md */,
+				C48587E82FEB1A56000AD820 /* SNIPPETS_FEATURE.md */,
+			);
+			path = "day 2";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
