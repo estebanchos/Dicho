@@ -94,12 +94,19 @@ final class CleanupService: CleanupServicing {
     static func hint(for category: AppCategory) -> String? {
         switch category {
         case .ide:
-            return "The user is dictating into a code editor; preserve any token "
+            return "The user is dictating into a code editor. Preserve any token "
                 + "that looks like an identifier (camelCase, snake_case, dotted, or "
-                + "punctuated), URL, file path, or number exactly as transcribed."
+                + "punctuated), URL, file path, or number exactly as transcribed. "
+                + "Treat ALL-CAPS acronyms (JSON, URL, HTTP, API, UUID, SQL, HTML, CSS, "
+                + "XML, REST, JWT, IDE, etc.) as identifiers — never replace them with "
+                + "homophones (e.g. JSON must never become \"Jason\"). Do NOT split a "
+                + "compound identifier into separate English words."
         case .terminal:
-            return "The user is dictating into a terminal; preserve commands, "
-                + "flags, paths, and shell punctuation exactly as transcribed."
+            return "The user is dictating into a terminal. Preserve commands, "
+                + "flags, paths, and shell punctuation exactly as transcribed, including "
+                + "the original spacing between tokens. Do NOT add commas, periods, or "
+                + "other punctuation between consecutive command tokens, arguments, or "
+                + "flags — terminal input has no English sentence structure."
         case .messaging:
             return "The user is dictating an informal message; light contractions "
                 + "are acceptable but do not change register or formality."
@@ -178,3 +185,5 @@ final class CleanupService: CleanupServicing {
         LanguageModelSession(instructions: Self.buildInstructions(for: appContext))
     }
 }
+
+
