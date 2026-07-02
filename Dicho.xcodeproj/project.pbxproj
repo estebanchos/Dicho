@@ -40,6 +40,7 @@
 		C48CD5DF2FED9D3500300816 /* iOS_Product_SPEC.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = iOS_Product_SPEC.md; sourceTree = "<group>"; };
 		C48CD5E02FED9D3500300816 /* iOS_Architecture.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = iOS_Architecture.md; sourceTree = "<group>"; };
 		C48CD5E12FED9D3500300816 /* optimization_plan.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = optimization_plan.md; sourceTree = "<group>"; };
+		C48CD5E22FED9D3500300816 /* iOS_TASKS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = iOS_TASKS.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -151,6 +152,7 @@
 			children = (
 				C48CD5DF2FED9D3500300816 /* iOS_Product_SPEC.md */,
 				C48CD5E02FED9D3500300816 /* iOS_Architecture.md */,
+				C48CD5E22FED9D3500300816 /* iOS_TASKS.md */,
 			);
 			path = iOS;
 			sourceTree = "<group>";
@@ -461,6 +463,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Dicho/Dicho.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -499,6 +502,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Dicho/Dicho.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
