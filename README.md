@@ -18,6 +18,33 @@ Dicho requests three permissions on first launch:
 - **Accessibility** — to monitor the hotkey and insert text via synthetic paste
 - **Speech model** — on-device model downloaded via Apple's asset system
 
+## Installing
+
+Dicho is distributed as a notarized, Developer ID-signed app via direct
+download (not the Mac App Store — the sandbox prohibits the global event
+tap and synthetic paste the core loop depends on).
+
+1. Download `Dicho.zip` and unzip it.
+2. Drag **Dicho.app** into `/Applications`.
+3. Launch Dicho. Because the build is notarized, Gatekeeper opens it without
+   the right-click-to-open workaround.
+4. The onboarding window walks you through the three required permissions
+   (Microphone, Accessibility, Speech model). The app is functional once all
+   three are green.
+
+Dicho lives in the menu bar (there is no Dock icon). Double-tap **Ctrl** to
+start dictating, tap **Ctrl** once to stop, **Esc** to cancel.
+
+## Privacy
+
+Dicho makes **no network calls**. All transcription (Apple
+SpeechAnalyzer / SpeechTranscriber) and cleanup (Apple Foundation Models)
+runs entirely on-device. Dictated audio and text never leave your Mac and
+are never persisted or logged — only your settings are saved (in
+`UserDefaults`). The only network activity Dicho can trigger is the
+operating system's own one-time download of the on-device speech model,
+performed by macOS (not by Dicho) via Apple's asset system.
+
 ## Building
 
 Open `Dicho.xcodeproj` in Xcode 26+, select the **Dicho** scheme, and run.
