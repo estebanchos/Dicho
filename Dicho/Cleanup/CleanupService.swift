@@ -142,8 +142,10 @@ final class CleanupService: CleanupServicing {
         that", or "correction"), apply the self-correction — drop the abandoned text — \
         rather than merely swapping the punctuation. \
         ("Tuesday — no wait, Friday" → "Friday", never "Tuesday, no wait, Friday".)
-        - Keeping names, addresses, and terms consistent with how they appear earlier in \
-        this conversation's transcript chunks.
+        - Keeping names, addresses, and terms consistent across this conversation's \
+        transcript chunks. If the same name or term appears in differing forms, use the \
+        most complete and plausible form for every mention — not necessarily the form \
+        that appeared first.
 
         FORBIDDEN: Do NOT paraphrase, summarize, translate, change register or tone, \
         or alter any identifiers, numbers, URLs, code, or technical terms. \

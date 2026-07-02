@@ -356,6 +356,17 @@ struct CleanupServiceTests {
         #expect(instructions.localizedCaseInsensitiveContains("consistent"))
     }
 
+    @Test("Continuity rule prefers the most complete form over the earliest mention")
+    func continuityRulePrefersMostCompleteForm() {
+        // When ASR hears the same name two ways ("nicholas F" early,
+        // "nicholas ave" later), anchoring on the EARLIEST mention propagates
+        // the mis-hearing (M9 manual check 1). The rule must prefer the most
+        // complete/plausible form instead.
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("most complete"))
+        #expect(!instructions.localizedCaseInsensitiveContains("appear earlier"))
+    }
+
     @Test("Pause-repair rule defers to self-correction so 'Tuesday — no wait, Friday' still resolves to Friday")
     func pauseRepairDefersToSelfCorrection() {
         let instructions = CleanupService.buildInstructions()
