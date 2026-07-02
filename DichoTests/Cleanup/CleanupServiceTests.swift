@@ -355,6 +355,19 @@ struct CleanupServiceTests {
         let instructions = CleanupService.buildInstructions()
         #expect(instructions.localizedCaseInsensitiveContains("consistent"))
     }
+
+    @Test("Pause-repair rule defers to self-correction so 'Tuesday — no wait, Friday' still resolves to Friday")
+    func pauseRepairDefersToSelfCorrection() {
+        let instructions = CleanupService.buildInstructions()
+        // The carve-out must state that pause repair does not override self-correction.
+        #expect(instructions.localizedCaseInsensitiveContains("never overrides the self-correction"))
+        // The em-dash self-correction example appears in both rules (self-correction +
+        // the pause-repair carve-out), so "no wait" is present more than once.
+        let noWaitOccurrences = instructions.components(separatedBy: "no wait").count - 1
+        #expect(noWaitOccurrences >= 2)
+        // And the carve-out spells out the wrong output it must avoid.
+        #expect(instructions.contains("never \"Tuesday, no wait, Friday\""))
+    }
 }
 
 // MARK: - Session-lifecycle suite (M9, plan §A2)

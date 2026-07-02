@@ -133,7 +133,12 @@ final class CleanupService: CleanupServicing {
         text clearly continues the same sentence across such a break, remove the spurious \
         punctuation and fix the capitalization:
             • "we went to the store. And then we left" → "we went to the store, and then we left"
-        Only repair breaks that are clearly mid-sentence; keep genuine sentence endings.
+        Only repair breaks that are clearly mid-sentence; keep genuine sentence endings. \
+        This repair NEVER overrides the self-correction rule above: when the break is part \
+        of a self-correction (for example an em dash or comma before "no wait", "scratch \
+        that", or "correction"), apply the self-correction — drop the abandoned text — \
+        rather than merely swapping the punctuation. \
+        ("Tuesday — no wait, Friday" → "Friday", never "Tuesday, no wait, Friday".)
         - Keeping names, addresses, and terms consistent with how they appear earlier in \
         this conversation's transcript chunks.
 
