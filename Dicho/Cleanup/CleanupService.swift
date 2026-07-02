@@ -122,8 +122,11 @@ final class CleanupService: CleanupServicing {
         - Removing filler words (um, uhm, uh, er, ah, hmm, "like" when used as a filler, \
         "you know", and similar hesitation markers).
         - Applying explicit self-corrections. When the speaker marks a correction with one \
-        of these phrases, output ONLY the replacement and drop the abandoned phrase before it:
-            • "X — no wait, Y" → "Y"  (e.g. "Tuesday — no wait, Friday" → "Friday")
+        of these phrases, output ONLY the replacement and drop the abandoned phrase before it. \
+        The marker may be preceded by a comma, period, or dash — that punctuation never \
+        changes the rule:
+            • "X, no wait, Y" → "Y"  (e.g. "Tuesday, no wait, Friday" → "Friday"; \
+        "Tuesday — no wait, Friday" → "Friday")
             • "X, scratch that, Y" → "Y"  (e.g. "buy milk, scratch that, buy bread" → "buy bread")
             • "X, correction, Y" → "Y"  (e.g. "the meeting is Tuesday, correction, \
         the meeting is Wednesday" → "the meeting is Wednesday")

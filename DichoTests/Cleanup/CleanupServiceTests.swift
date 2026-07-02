@@ -368,6 +368,30 @@ struct CleanupServiceTests {
         // And the carve-out spells out the wrong output it must avoid.
         #expect(instructions.contains("never \"Tuesday, no wait, Friday\""))
     }
+
+    // MARK: - Comma-form self-correction (M9 retest fix, 2026-07-02)
+
+    @Test("Self-correction shows the comma-form 'no wait' worked example")
+    func instructionsIncludeCommaFormNoWaitExample() {
+        // The transcriber emits commas, not em dashes, around correction markers.
+        // The worked example must match transcript-shaped input or the on-device
+        // model doesn't fire on it (M9 manual check 4: "correction" and
+        // "scratch that" — both shown with commas — worked; "no wait" didn't).
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("\"Tuesday, no wait, Friday\" → \"Friday\""))
+    }
+
+    @Test("Self-correction keeps the em-dash 'no wait' worked example alongside the comma form")
+    func instructionsKeepEmDashNoWaitExample() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("\"Tuesday — no wait, Friday\" → \"Friday\""))
+    }
+
+    @Test("Self-correction states that the marker's preceding punctuation never changes the rule")
+    func instructionsMakeMarkerPunctuationAgnostic() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("comma, period, or dash"))
+    }
 }
 
 // MARK: - Session-lifecycle suite (M9, plan §A2)
