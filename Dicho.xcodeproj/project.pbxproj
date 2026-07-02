@@ -24,26 +24,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		C4133C212FF6EE90003D9976 /* FIRST_RELEASE_CHECKLIST.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = FIRST_RELEASE_CHECKLIST.md; sourceTree = "<group>"; };
-		C4133C222FF6EEAC003D9976 /* NEW_RELEASE_CHECKLIST.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = NEW_RELEASE_CHECKLIST.md; sourceTree = "<group>"; };
 		C41E70602FDB3DD30005E429 /* Dicho.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dicho.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C41E706F2FDB3DD50005E429 /* DichoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DichoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C41E70792FDB3DD50005E429 /* DichoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DichoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		C41E708D2FDB3E7A0005E429 /* ARCHITECTURE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ARCHITECTURE.md; sourceTree = "<group>"; };
-		C41E708E2FDB3E7A0005E429 /* PRODUCT_SPEC.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PRODUCT_SPEC.md; sourceTree = "<group>"; };
-		C41E708F2FDB3E7A0005E429 /* TASKS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TASKS.md; sourceTree = "<group>"; };
 		C41E70902FDB3E870005E429 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
-		C41E70AB2FDB4E8E0005E429 /* JOURNAL.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = JOURNAL.md; sourceTree = "<group>"; };
-		C41E70AC2FDB4FE90005E429 /* RESTART_AGENT.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = RESTART_AGENT.md; sourceTree = "<group>"; };
-		C48587E52FEB1A2A000AD820 /* EXPANDED_DEVICES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = EXPANDED_DEVICES.md; sourceTree = "<group>"; };
-		C48587E62FEB1A3A000AD820 /* LANGUAGE_IMPLEMENTATION.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = LANGUAGE_IMPLEMENTATION.md; sourceTree = "<group>"; };
-		C48587E72FEB1A51000AD820 /* OPTIMIZATIONS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = OPTIMIZATIONS.md; sourceTree = "<group>"; };
-		C48587E82FEB1A56000AD820 /* SNIPPETS_FEATURE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = SNIPPETS_FEATURE.md; sourceTree = "<group>"; };
-		C48CD5DF2FED9D3500300816 /* iOS_Product_SPEC.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = iOS_Product_SPEC.md; sourceTree = "<group>"; };
-		C48CD5E02FED9D3500300816 /* iOS_Architecture.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = iOS_Architecture.md; sourceTree = "<group>"; };
-		C48CD5E12FED9D3500300816 /* optimization_plan.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = optimization_plan.md; sourceTree = "<group>"; };
-		C48CD5E22FED9D3500300816 /* iOS_TASKS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = iOS_TASKS.md; sourceTree = "<group>"; };
-		C48CD5E32FED9D3500300816 /* iOS_UX_FIRST_APPROACH.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = iOS_UX_FIRST_APPROACH.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -57,6 +41,11 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		C4133D5D2FF6F737003D9976 /* Documentation */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Documentation;
+			sourceTree = "<group>";
+		};
 		C41E70622FDB3DD30005E429 /* Dicho */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -102,19 +91,10 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		C4133C202FF6EE3D003D9976 /* Release */ = {
-			isa = PBXGroup;
-			children = (
-				C4133C212FF6EE90003D9976 /* FIRST_RELEASE_CHECKLIST.md */,
-				C4133C222FF6EEAC003D9976 /* NEW_RELEASE_CHECKLIST.md */,
-			);
-			path = Release;
-			sourceTree = "<group>";
-		};
 		C41E70572FDB3DD30005E429 = {
 			isa = PBXGroup;
 			children = (
-				C41E708C2FDB3DFA0005E429 /* Documentation */,
+				C4133D5D2FF6F737003D9976 /* Documentation */,
 				C41E70622FDB3DD30005E429 /* Dicho */,
 				C41E70722FDB3DD50005E429 /* DichoTests */,
 				C41E707C2FDB3DD50005E429 /* DichoUITests */,
@@ -131,44 +111,6 @@
 				C41E70792FDB3DD50005E429 /* DichoUITests.xctest */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		C41E708C2FDB3DFA0005E429 /* Documentation */ = {
-			isa = PBXGroup;
-			children = (
-				C48CD5DE2FEC723000300816 /* iOS */,
-				C48587E42FEB19FE000AD820 /* day 2 */,
-				C41E70AC2FDB4FE90005E429 /* RESTART_AGENT.md */,
-				C41E708D2FDB3E7A0005E429 /* ARCHITECTURE.md */,
-				C41E708E2FDB3E7A0005E429 /* PRODUCT_SPEC.md */,
-				C41E708F2FDB3E7A0005E429 /* TASKS.md */,
-				C41E70AB2FDB4E8E0005E429 /* JOURNAL.md */,
-				C48CD5E12FED9D3500300816 /* optimization_plan.md */,
-				C4133C202FF6EE3D003D9976 /* Release */,
-			);
-			path = Documentation;
-			sourceTree = "<group>";
-		};
-		C48587E42FEB19FE000AD820 /* day 2 */ = {
-			isa = PBXGroup;
-			children = (
-				C48587E52FEB1A2A000AD820 /* EXPANDED_DEVICES.md */,
-				C48587E62FEB1A3A000AD820 /* LANGUAGE_IMPLEMENTATION.md */,
-				C48587E72FEB1A51000AD820 /* OPTIMIZATIONS.md */,
-				C48587E82FEB1A56000AD820 /* SNIPPETS_FEATURE.md */,
-			);
-			path = "day 2";
-			sourceTree = "<group>";
-		};
-		C48CD5DE2FEC723000300816 /* iOS */ = {
-			isa = PBXGroup;
-			children = (
-				C48CD5DF2FED9D3500300816 /* iOS_Product_SPEC.md */,
-				C48CD5E02FED9D3500300816 /* iOS_Architecture.md */,
-				C48CD5E22FED9D3500300816 /* iOS_TASKS.md */,
-				C48CD5E32FED9D3500300816 /* iOS_UX_FIRST_APPROACH.md */,
-			);
-			path = iOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
