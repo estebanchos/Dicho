@@ -9,26 +9,58 @@ struct CleanedText {
 
 /// Production cleanup service using Foundation Models guided generation.
 ///
-/// One `LanguageModelSession` is created per dictation and prewarmed when recording
-/// starts. Long transcripts are split into ≤512-token chunks and cleaned serially,
-/// then joined. The coordinator's `withCleanupTimeout` provides the per-chunk timeout;
-/// this class is responsible only for the model interaction.
+/// A single `LanguageModelSession` (behind the `CleanupModelSessioning` seam) is
+/// prewarmed when recording starts and then **reused across every chunk** of a
+/// dictation, so later chunks retain the context of earlier ones (name/address
+/// consistency, pause-seam repair). Long transcripts are split into ≤512-token
+/// chunks and cleaned serially, then joined.
+///
+/// This class owns the **per-chunk timeout**: each chunk's model turn is raced
+/// against `chunkTimeout` (see `cleanChunk`). A timed-out session may still be
+/// responding — and `LanguageModelSession` forbids concurrent requests — so a
+/// timeout (or a context-window overflow) rotates in a fresh session before the
+/// next chunk. Collaborators are injectable so the reuse/rotation/timeout logic
+/// is unit-testable without live FoundationModels calls.
 @MainActor
 final class CleanupService: CleanupServicing {
 
-    private var pendingSession: LanguageModelSession?
+    private let chunkTimeout: TimeInterval
+    private let isModelAvailable: @MainActor () -> Bool
+    private let makeSessionImpl: @MainActor (String) -> any CleanupModelSessioning
+
+    private var pendingSession: (any CleanupModelSessioning)?
+
+    /// - Parameters:
+    ///   - chunkTimeout: per-chunk model-response timeout; a chunk that exceeds
+    ///     it is inserted raw and the session is rotated.
+    ///   - isModelAvailable: injectable availability check so behavior tests do
+    ///     not depend on the test machine's Apple Intelligence state.
+    ///   - makeSession: factory building a session from instruction text.
+    init(
+        chunkTimeout: TimeInterval = Constants.cleanupChunkTimeout,
+        isModelAvailable: @escaping @MainActor () -> Bool = {
+            if case .available = SystemLanguageModel.default.availability { true } else { false }
+        },
+        makeSession: @escaping @MainActor (String) -> any CleanupModelSessioning = {
+            FoundationModelCleanupSession(instructions: $0)
+        }
+    ) {
+        self.chunkTimeout = chunkTimeout
+        self.isModelAvailable = isModelAvailable
+        self.makeSessionImpl = makeSession
+    }
 
     // MARK: - CleanupServicing
 
     func prewarm() {
-        guard case .available = SystemLanguageModel.default.availability else { return }
-        let session = makeSession()
+        guard isModelAvailable() else { return }
+        let session = makeSessionImpl(Self.buildInstructions())
         session.prewarm()
         pendingSession = session
     }
 
     func clean(_ text: String, appContext: AppContext?) async throws -> String {
-        guard case .available = SystemLanguageModel.default.availability else {
+        guard isModelAvailable() else {
             throw CleanupError.unavailable
         }
 
@@ -40,35 +72,35 @@ final class CleanupService: CleanupServicing {
         }
 
         let chunks = Self.splitIntoChunks(text)
+        var session = resolveInitialSession(appContext: appContext)
         var cleaned: [String] = []
-        // Prewarm built a baseline (no-hint) session; if the appContext implies a
-        // hint, the prewarmed instructions are stale and we discard it.
-        let needsContextAwareSession = Self.hint(for: appContext?.category ?? .generalWriting) != nil
 
-        for (index, chunk) in chunks.enumerated() {
-            let session: LanguageModelSession
-            if index == 0 {
-                if needsContextAwareSession {
-                    session = makeSession(appContext: appContext)
-                    pendingSession = nil
-                } else if let pending = pendingSession {
-                    session = pending
-                    pendingSession = nil
-                } else {
-                    session = makeSession()
+        for chunk in chunks {
+            switch try await cleanChunk(chunk, session: session) {
+            case .cleaned(let cleanedChunk):
+                cleaned.append(cleanedChunk)
+            case .rawFallback:
+                // Leakage: keep the session (it's still healthy) but insert raw.
+                cleaned.append(chunk)
+            case .timedOut:
+                // The session may still be responding; rotate before the next chunk.
+                cleaned.append(chunk)
+                session = makeSessionImpl(Self.buildInstructions(for: appContext))
+            case .overflowed:
+                // Window full: rotate to a fresh session and retry this chunk once.
+                session = makeSessionImpl(Self.buildInstructions(for: appContext))
+                switch try await cleanChunk(chunk, session: session) {
+                case .cleaned(let cleanedChunk):
+                    cleaned.append(cleanedChunk)
+                case .timedOut:
+                    // Retry timed out — insert raw and rotate again for later chunks.
+                    cleaned.append(chunk)
+                    session = makeSessionImpl(Self.buildInstructions(for: appContext))
+                default:
+                    // Second overflow or leakage: insert raw, keep this session.
+                    cleaned.append(chunk)
                 }
-            } else {
-                session = makeSession(appContext: appContext)
             }
-            let response = try await session.respond(
-                to: Self.buildPrompt(for: chunk),
-                generating: CleanedText.self
-            )
-            let cleanedChunk = response.content.text
-            // Defensive: if the model echoed its guided-generation schema or
-            // any other system-prompt artifact, fall back to the raw chunk
-            // rather than insert garbage into the user's document.
-            cleaned.append(Self.isLikelyModelLeakage(cleanedChunk) ? chunk : cleanedChunk)
         }
 
         return cleaned.joined(separator: " ")
@@ -93,6 +125,14 @@ final class CleanupService: CleanupServicing {
             • "X, correction, Y" → "Y"  (e.g. "the meeting is Tuesday, correction, \
         the meeting is Wednesday" → "the meeting is Wednesday")
         - Adding light punctuation (commas, periods) and standard capitalization.
+        - Repairing pause artifacts: the transcriber sometimes inserts a period or comma \
+        where the speaker merely paused mid-sentence, capitalizing the next word. When the \
+        text clearly continues the same sentence across such a break, remove the spurious \
+        punctuation and fix the capitalization:
+            • "we went to the store. And then we left" → "we went to the store, and then we left"
+        Only repair breaks that are clearly mid-sentence; keep genuine sentence endings.
+        - Keeping names, addresses, and terms consistent with how they appear earlier in \
+        this conversation's transcript chunks.
 
         FORBIDDEN: Do NOT paraphrase, summarize, translate, change register or tone, \
         or alter any identifiers, numbers, URLs, code, or technical terms. \
@@ -240,8 +280,64 @@ final class CleanupService: CleanupServicing {
 
     // MARK: - Private
 
-    private func makeSession(appContext: AppContext? = nil) -> LanguageModelSession {
-        LanguageModelSession(instructions: Self.buildInstructions(for: appContext))
+    /// Outcome of a single chunk's cleanup turn.
+    private enum ChunkOutcome {
+        /// The model returned usable cleaned text.
+        case cleaned(String)
+        /// The model echoed system-prompt artifacts; caller should insert raw.
+        case rawFallback
+        /// The turn exceeded `chunkTimeout`.
+        case timedOut
+        /// The session's context window overflowed.
+        case overflowed
+    }
+
+    /// Picks the session for the first chunk. Reuses the prewarmed baseline
+    /// session when the app context has no hint; otherwise discards it and builds
+    /// a context-aware session (the prewarmed instructions would be stale).
+    private func resolveInitialSession(appContext: AppContext?) -> any CleanupModelSessioning {
+        let needsContextAwareSession = Self.hint(for: appContext?.category ?? .generalWriting) != nil
+        if needsContextAwareSession {
+            pendingSession = nil
+            return makeSessionImpl(Self.buildInstructions(for: appContext))
+        }
+        if let pending = pendingSession {
+            pendingSession = nil
+            return pending
+        }
+        return makeSessionImpl(Self.buildInstructions(for: appContext))
+    }
+
+    /// Cleans one chunk on `session`, racing the model response against
+    /// `chunkTimeout`. Maps overflow, timeout, and leakage into `ChunkOutcome`;
+    /// any other error is rethrown to the caller (the coordinator falls back to
+    /// the raw transcript, so caller-visible behavior is unchanged).
+    private func cleanChunk(
+        _ chunk: String,
+        session: any CleanupModelSessioning
+    ) async throws -> ChunkOutcome {
+        let prompt = Self.buildPrompt(for: chunk)
+        let timeout = chunkTimeout
+        do {
+            let cleaned = try await withThrowingTaskGroup(of: String.self) { group in
+                group.addTask { try await session.respondCleanedText(to: prompt) }
+                group.addTask {
+                    try await Task.sleep(for: .seconds(timeout))
+                    throw CleanupError.timeout
+                }
+                let result = try await group.next()!
+                group.cancelAll()
+                return result
+            }
+            // Defensive: if the model echoed its guided-generation schema or any
+            // other system-prompt artifact, fall back to the raw chunk rather
+            // than insert garbage into the user's document.
+            return Self.isLikelyModelLeakage(cleaned) ? .rawFallback : .cleaned(cleaned)
+        } catch CleanupError.timeout {
+            return .timedOut
+        } catch CleanupSessionError.contextWindowExceeded {
+            return .overflowed
+        }
     }
 }
 

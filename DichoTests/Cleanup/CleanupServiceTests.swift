@@ -327,4 +327,204 @@ struct CleanupServiceTests {
         #expect(instructions.contains("no wait"))
         #expect(instructions.localizedCaseInsensitiveContains("Friday"))
     }
+
+    // MARK: - Pause-repair + continuity rules (M9)
+
+    @Test("Instructions include the pause-repair rule with its worked example, before FORBIDDEN")
+    func instructionsIncludePauseRepairRule() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("pause"))
+        #expect(instructions.localizedCaseInsensitiveContains("mid-sentence"))
+        // The "went to the store" worked example is what the 3B model follows.
+        #expect(instructions.localizedCaseInsensitiveContains("went to the store"))
+
+        // The rule must sit BEFORE the FORBIDDEN block so it reads as ordinary
+        // cleanup guidance, not an override of the core contract.
+        guard
+            let pauseRange = instructions.range(of: "pause", options: .caseInsensitive),
+            let forbiddenRange = instructions.range(of: "FORBIDDEN")
+        else {
+            Issue.record("Expected both the pause rule and the FORBIDDEN block")
+            return
+        }
+        #expect(pauseRange.lowerBound < forbiddenRange.lowerBound)
+    }
+
+    @Test("Instructions include a cross-chunk consistency line")
+    func instructionsIncludeContinuityLine() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("consistent"))
+    }
+}
+
+// MARK: - Session-lifecycle suite (M9, plan §A2)
+
+/// Error used to verify that unrecognized session errors propagate out of `clean`.
+private enum SessionTestError: Error, Equatable {
+    case boom
+}
+
+/// Marker prefix a scripted session prepends to signal "this chunk was cleaned",
+/// so tests can distinguish cleaned output from a raw-fallback chunk.
+private let cleanedMarkerPrefix = "CLEANED::"
+
+/// Builds a transcript of three ~1500-char sentences (~4500 chars total) that
+/// `splitIntoChunks` divides into exactly three chunks at the 2048-char budget.
+@MainActor
+private func makeThreeChunkInput() -> String {
+    (1...3).map { i in
+        String(repeating: "word\(i) ", count: 250).trimmingCharacters(in: .whitespaces) + "."
+    }.joined(separator: " ")
+}
+
+/// Scripted `.succeed` transform: strips the prompt boilerplate and returns the
+/// chunk prefixed with `cleanedMarkerPrefix`, so the join order and cleaned-vs-raw
+/// distinction are both observable in the final result.
+@MainActor
+private func markCleaned(_ prompt: String) -> String {
+    let promptPrefix = CleanupService.buildPrompt(for: "")
+    let chunk = prompt.hasPrefix(promptPrefix) ? String(prompt.dropFirst(promptPrefix.count)) : prompt
+    return cleanedMarkerPrefix + chunk
+}
+
+/// Counts how many chunks were marked cleaned in the joined result.
+private func cleanedCount(in result: String) -> Int {
+    result.components(separatedBy: cleanedMarkerPrefix).count - 1
+}
+
+@Suite("CleanupService — shared-session lifecycle (fakes, no live model)")
+@MainActor
+struct CleanupServiceSessionLifecycleTests {
+
+    @Test("A single shared session cleans all three chunks, joined in order")
+    func sharedSessionAcrossChunks() async throws {
+        let input = makeThreeChunkInput()
+        let chunks = CleanupService.splitIntoChunks(input)
+        #expect(chunks.count == 3)
+
+        let session = FakeCleanupModelSession([.succeed(markCleaned)])
+        let factory = FakeSessionFactory([session])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 1)
+        #expect(session.prompts.count == 3)
+        let expected = chunks.map { cleanedMarkerPrefix + $0 }.joined(separator: " ")
+        #expect(result == expected)
+    }
+
+    @Test("A prewarmed session is reused for all chunks — no extra session created")
+    func prewarmedSessionReused() async throws {
+        let input = makeThreeChunkInput()
+        let session = FakeCleanupModelSession([.succeed(markCleaned)])
+        let factory = FakeSessionFactory([session])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        service.prewarm()
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 1)
+        #expect(session.prewarmCount == 1)
+        #expect(session.prompts.count == 3)
+        #expect(cleanedCount(in: result) == 3)
+    }
+
+    @Test("A context hint discards the prewarmed session and builds a context-aware one")
+    func contextHintDiscardsPrewarmedSession() async throws {
+        let input = makeThreeChunkInput()
+        let prewarmed = FakeCleanupModelSession([.succeed(markCleaned)])
+        let contextAware = FakeCleanupModelSession([.succeed(markCleaned)])
+        let factory = FakeSessionFactory([prewarmed, contextAware])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        service.prewarm()
+        let email = AppContext(bundleIdentifier: "com.apple.mail", localizedName: "Mail", category: .email)
+        _ = try await service.clean(input, appContext: email)
+
+        #expect(factory.sessionsCreated == 2)
+        #expect(prewarmed.prompts.isEmpty)         // discarded, never cleaned a chunk
+        #expect(contextAware.prompts.count == 3)   // served all chunks
+        let emailHint = CleanupService.hint(for: .email)
+        #expect(emailHint != nil)
+        #expect(factory.instructionsUsed.last?.contains(emailHint!) == true)
+    }
+
+    @Test("Context-window overflow rotates the session and retries the chunk")
+    func overflowRotatesAndRetries() async throws {
+        let input = makeThreeChunkInput()
+        let session1 = FakeCleanupModelSession([.succeed(markCleaned), .throwOverflow])
+        let session2 = FakeCleanupModelSession([.succeed(markCleaned)])
+        let factory = FakeSessionFactory([session1, session2])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 2)
+        #expect(session1.prompts.count == 2)   // chunk1 ok, chunk2 overflow
+        #expect(session2.prompts.count == 2)   // chunk2 retry ok, chunk3 ok
+        #expect(cleanedCount(in: result) == 3) // all three cleaned end-to-end
+    }
+
+    @Test("When the overflow retry also overflows, that chunk is raw and later chunks stay on session 2")
+    func overflowRetryFailsFallsBackRaw() async throws {
+        let input = makeThreeChunkInput()
+        let chunks = CleanupService.splitIntoChunks(input)
+        let session1 = FakeCleanupModelSession([.succeed(markCleaned), .throwOverflow])
+        let session2 = FakeCleanupModelSession([.throwOverflow, .succeed(markCleaned)])
+        let factory = FakeSessionFactory([session1, session2])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 2)
+        #expect(session2.prompts.count == 2)     // chunk2 retry (overflow), chunk3 (ok)
+        #expect(cleanedCount(in: result) == 2)   // chunk1 & chunk3 cleaned; chunk2 raw
+        #expect(result.contains(chunks[1]))      // raw chunk2 present verbatim
+    }
+
+    @Test("A timed-out chunk is inserted raw and rotates in a fresh session for later chunks")
+    func timeoutInsertsRawAndRotates() async throws {
+        let input = makeThreeChunkInput()
+        let chunks = CleanupService.splitIntoChunks(input)
+        let session1 = FakeCleanupModelSession([.succeed(markCleaned), .sleepForever])
+        let session2 = FakeCleanupModelSession([.succeed(markCleaned)])
+        let factory = FakeSessionFactory([session1, session2])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 2)
+        #expect(session2.prompts.count == 1)     // only chunk3 (chunk2 timed out on session1)
+        #expect(cleanedCount(in: result) == 2)   // chunk1 & chunk3 cleaned; chunk2 raw
+        #expect(result.contains(chunks[1]))      // raw chunk2 present verbatim
+    }
+
+    @Test("Schema leakage inserts the chunk raw WITHOUT rotating the session")
+    func leakageInsertsRawKeepsSession() async throws {
+        let input = makeThreeChunkInput()
+        let chunks = CleanupService.splitIntoChunks(input)
+        let session = FakeCleanupModelSession([.succeed(markCleaned), .succeedWithLeakage, .succeed(markCleaned)])
+        let factory = FakeSessionFactory([session])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 1)    // NOT rotated — the session is still healthy
+        #expect(session.prompts.count == 3)      // all three chunks on the same session
+        #expect(cleanedCount(in: result) == 2)   // chunk1 & chunk3 cleaned; chunk2 raw
+        #expect(result.contains(chunks[1]))      // raw chunk2 present verbatim
+    }
+
+    @Test("An unrecognized (non-overflow, non-timeout) session error propagates out of clean")
+    func unrecognizedErrorPropagates() async {
+        let input = makeThreeChunkInput()
+        let session = FakeCleanupModelSession([.succeed(markCleaned), .throwOther(SessionTestError.boom)])
+        let factory = FakeSessionFactory([session])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        await #expect(throws: SessionTestError.self) {
+            _ = try await service.clean(input, appContext: nil)
+        }
+    }
 }
