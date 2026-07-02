@@ -32,12 +32,15 @@ final class CleanupService: CleanupServicing {
 
     /// - Parameters:
     ///   - chunkTimeout: per-chunk model-response timeout; a chunk that exceeds
-    ///     it is inserted raw and the session is rotated.
+    ///     it is inserted raw and the session is rotated. Defaults to
+    ///     `Constants.cleanupChunkTimeout` when `nil` (resolved in the body
+    ///     rather than the default argument, which is a nonisolated context and
+    ///     cannot reference the main-actor-isolated constant).
     ///   - isModelAvailable: injectable availability check so behavior tests do
     ///     not depend on the test machine's Apple Intelligence state.
     ///   - makeSession: factory building a session from instruction text.
     init(
-        chunkTimeout: TimeInterval = Constants.cleanupChunkTimeout,
+        chunkTimeout: TimeInterval? = nil,
         isModelAvailable: @escaping @MainActor () -> Bool = {
             if case .available = SystemLanguageModel.default.availability { true } else { false }
         },
@@ -45,7 +48,7 @@ final class CleanupService: CleanupServicing {
             FoundationModelCleanupSession(instructions: $0)
         }
     ) {
-        self.chunkTimeout = chunkTimeout
+        self.chunkTimeout = chunkTimeout ?? Constants.cleanupChunkTimeout
         self.isModelAvailable = isModelAvailable
         self.makeSessionImpl = makeSession
     }
