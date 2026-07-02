@@ -24,6 +24,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		C4133C212FF6EE90003D9976 /* FIRST_RELEASE_CHECKLIST.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = FIRST_RELEASE_CHECKLIST.md; sourceTree = "<group>"; };
+		C4133C222FF6EEAC003D9976 /* NEW_RELEASE_CHECKLIST.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = NEW_RELEASE_CHECKLIST.md; sourceTree = "<group>"; };
 		C41E70602FDB3DD30005E429 /* Dicho.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dicho.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C41E706F2FDB3DD50005E429 /* DichoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DichoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C41E70792FDB3DD50005E429 /* DichoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DichoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -41,6 +43,7 @@
 		C48CD5E02FED9D3500300816 /* iOS_Architecture.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = iOS_Architecture.md; sourceTree = "<group>"; };
 		C48CD5E12FED9D3500300816 /* optimization_plan.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = optimization_plan.md; sourceTree = "<group>"; };
 		C48CD5E22FED9D3500300816 /* iOS_TASKS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = iOS_TASKS.md; sourceTree = "<group>"; };
+		C48CD5E32FED9D3500300816 /* iOS_UX_FIRST_APPROACH.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = iOS_UX_FIRST_APPROACH.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -99,6 +102,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		C4133C202FF6EE3D003D9976 /* Release */ = {
+			isa = PBXGroup;
+			children = (
+				C4133C212FF6EE90003D9976 /* FIRST_RELEASE_CHECKLIST.md */,
+				C4133C222FF6EEAC003D9976 /* NEW_RELEASE_CHECKLIST.md */,
+			);
+			path = Release;
+			sourceTree = "<group>";
+		};
 		C41E70572FDB3DD30005E429 = {
 			isa = PBXGroup;
 			children = (
@@ -132,6 +144,7 @@
 				C41E708F2FDB3E7A0005E429 /* TASKS.md */,
 				C41E70AB2FDB4E8E0005E429 /* JOURNAL.md */,
 				C48CD5E12FED9D3500300816 /* optimization_plan.md */,
+				C4133C202FF6EE3D003D9976 /* Release */,
 			);
 			path = Documentation;
 			sourceTree = "<group>";
@@ -153,6 +166,7 @@
 				C48CD5DF2FED9D3500300816 /* iOS_Product_SPEC.md */,
 				C48CD5E02FED9D3500300816 /* iOS_Architecture.md */,
 				C48CD5E22FED9D3500300816 /* iOS_TASKS.md */,
+				C48CD5E32FED9D3500300816 /* iOS_UX_FIRST_APPROACH.md */,
 			);
 			path = iOS;
 			sourceTree = "<group>";
