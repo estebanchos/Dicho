@@ -241,9 +241,9 @@ final class DictationCoordinator {
 
         let textToInsert: String
         do {
-            textToInsert = try await withCleanupTimeout {
-                try await self.cleanupService.clean(transcript, appContext: appContext)
-            }
+            // CleanupService now owns the per-chunk timeout (and session rotation
+            // on timeout/overflow), so the coordinator calls clean() directly.
+            textToInsert = try await cleanupService.clean(transcript, appContext: appContext)
         } catch CleanupError.unavailable {
             textToInsert = transcript
             fireNotice(.cleanupUnavailable)
@@ -280,23 +280,6 @@ final class DictationCoordinator {
             try? await Task.sleep(for: .seconds(Constants.noticeDisplayDuration))
             guard !Task.isCancelled else { return }
             self?.activeNotice = nil
-        }
-    }
-
-    /// Races the cleanup operation against `Constants.cleanupChunkTimeout`.
-    /// Throws `CleanupError.timeout` if the timeout wins.
-    private func withCleanupTimeout<T: Sendable>(
-        _ operation: @escaping @Sendable () async throws -> T
-    ) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await Task.sleep(for: .seconds(Constants.cleanupChunkTimeout))
-                throw CleanupError.timeout
-            }
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
         }
     }
 }
