@@ -37,11 +37,27 @@
 		C48587E62FEB1A3A000AD820 /* LANGUAGE_IMPLEMENTATION.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = LANGUAGE_IMPLEMENTATION.md; sourceTree = "<group>"; };
 		C48587E72FEB1A51000AD820 /* OPTIMIZATIONS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = OPTIMIZATIONS.md; sourceTree = "<group>"; };
 		C48587E82FEB1A56000AD820 /* SNIPPETS_FEATURE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = SNIPPETS_FEATURE.md; sourceTree = "<group>"; };
+		C48CD5DF2FED9D3500300816 /* iOS_Product_SPEC.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = iOS_Product_SPEC.md; sourceTree = "<group>"; };
+		C48CD5E02FED9D3500300816 /* iOS_Architecture.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = iOS_Architecture.md; sourceTree = "<group>"; };
+		C48CD5E12FED9D3500300816 /* optimization_plan.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = optimization_plan.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		C4133A972FF6B10B003D9976 /* Exceptions for "Dicho" folder in "Dicho" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C41E705F2FDB3DD30005E429 /* Dicho */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C41E70622FDB3DD30005E429 /* Dicho */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C4133A972FF6B10B003D9976 /* Exceptions for "Dicho" folder in "Dicho" target */,
+			);
 			path = Dicho;
 			sourceTree = "<group>";
 		};
@@ -107,12 +123,14 @@
 		C41E708C2FDB3DFA0005E429 /* Documentation */ = {
 			isa = PBXGroup;
 			children = (
+				C48CD5DE2FEC723000300816 /* iOS */,
 				C48587E42FEB19FE000AD820 /* day 2 */,
 				C41E70AC2FDB4FE90005E429 /* RESTART_AGENT.md */,
 				C41E708D2FDB3E7A0005E429 /* ARCHITECTURE.md */,
 				C41E708E2FDB3E7A0005E429 /* PRODUCT_SPEC.md */,
 				C41E708F2FDB3E7A0005E429 /* TASKS.md */,
 				C41E70AB2FDB4E8E0005E429 /* JOURNAL.md */,
+				C48CD5E12FED9D3500300816 /* optimization_plan.md */,
 			);
 			path = Documentation;
 			sourceTree = "<group>";
@@ -126,6 +144,15 @@
 				C48587E82FEB1A56000AD820 /* SNIPPETS_FEATURE.md */,
 			);
 			path = "day 2";
+			sourceTree = "<group>";
+		};
+		C48CD5DE2FEC723000300816 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				C48CD5DF2FED9D3500300816 /* iOS_Product_SPEC.md */,
+				C48CD5E02FED9D3500300816 /* iOS_Architecture.md */,
+			);
+			path = iOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -440,6 +467,8 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = "";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Dicho/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dicho needs microphone access to transcribe your speech on-device.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Dicho uses on-device speech recognition to transcribe your speech privately.";
@@ -475,6 +504,8 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = "";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Dicho/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dicho needs microphone access to transcribe your speech on-device.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Dicho uses on-device speech recognition to transcribe your speech privately.";
