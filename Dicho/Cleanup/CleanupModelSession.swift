@@ -47,7 +47,14 @@ final class FoundationModelCleanupSession: CleanupModelSessioning {
 
     func respondCleanedText(to prompt: String) async throws -> String {
         do {
-            return try await session.respond(to: prompt, generating: CleanedText.self).content.text
+            // Greedy sampling: cleanup is a deterministic transformation, and the
+            // default random sampling made rule application vary run-to-run
+            // (Apple recommends greedy for deterministic output — WWDC25 301).
+            return try await session.respond(
+                to: prompt,
+                generating: CleanedText.self,
+                options: GenerationOptions(sampling: .greedy)
+            ).content.text
         } catch let error as LanguageModelSession.GenerationError {
             if case .exceededContextWindowSize = error {
                 throw CleanupSessionError.contextWindowExceeded
