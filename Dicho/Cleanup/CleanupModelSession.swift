@@ -8,6 +8,10 @@ enum CleanupSessionError: Error, Sendable {
     /// The session reached its context-window token limit. `CleanupService`
     /// responds by rotating to a fresh session and retrying the chunk once.
     case contextWindowExceeded
+    /// The model's safety guardrails refused the prompt or response.
+    /// `CleanupService` inserts that chunk raw and keeps the session — the
+    /// session itself is still healthy for later chunks.
+    case guardrailTriggered
 }
 
 /// Thin seam over one `LanguageModelSession` so `CleanupService`'s
@@ -38,7 +42,15 @@ final class FoundationModelCleanupSession: CleanupModelSessioning {
     private let session: LanguageModelSession
 
     init(instructions: String) {
-        session = LanguageModelSession(instructions: instructions)
+        // Dictation cleanup transforms user-authored speech, and the default
+        // guardrails refuse profane-but-legitimate transcripts outright
+        // ("Safety guardrails were triggered", observed 2026-07-05). Apple's
+        // permissive mode exists for exactly this content-transformation case.
+        // It can still trigger on extreme content — `respondCleanedText` maps
+        // that onto `.guardrailTriggered` so the chunk degrades to raw instead
+        // of failing the whole dictation.
+        let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+        session = LanguageModelSession(model: model, instructions: instructions)
     }
 
     func prewarm() {
@@ -56,10 +68,14 @@ final class FoundationModelCleanupSession: CleanupModelSessioning {
                 options: GenerationOptions(sampling: .greedy)
             ).content.text
         } catch let error as LanguageModelSession.GenerationError {
-            if case .exceededContextWindowSize = error {
+            switch error {
+            case .exceededContextWindowSize:
                 throw CleanupSessionError.contextWindowExceeded
+            case .guardrailViolation:
+                throw CleanupSessionError.guardrailTriggered
+            default:
+                throw error
             }
-            throw error
         }
     }
 }

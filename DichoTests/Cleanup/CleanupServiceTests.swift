@@ -564,6 +564,39 @@ struct CleanupServiceSessionLifecycleTests {
         #expect(result.contains(chunks[1]))      // raw chunk2 present verbatim
     }
 
+    @Test("A guardrail-refused chunk is inserted raw WITHOUT rotating the session or failing the call")
+    func guardrailInsertsRawKeepsSession() async throws {
+        let input = makeThreeChunkInput()
+        let chunks = CleanupService.splitIntoChunks(input)
+        let session = FakeCleanupModelSession([.succeed(markCleaned), .throwGuardrail, .succeed(markCleaned)])
+        let factory = FakeSessionFactory([session])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 1)    // NOT rotated — the session is still healthy
+        #expect(session.prompts.count == 3)      // all three chunks on the same session
+        #expect(cleanedCount(in: result) == 2)   // chunk1 & chunk3 cleaned; chunk2 raw
+        #expect(result.contains(chunks[1]))      // raw chunk2 present verbatim
+    }
+
+    @Test("A guardrail refusal during the overflow retry falls back to the raw chunk")
+    func guardrailDuringOverflowRetryFallsBackRaw() async throws {
+        let input = makeThreeChunkInput()
+        let chunks = CleanupService.splitIntoChunks(input)
+        let session1 = FakeCleanupModelSession([.succeed(markCleaned), .throwOverflow])
+        let session2 = FakeCleanupModelSession([.throwGuardrail, .succeed(markCleaned)])
+        let factory = FakeSessionFactory([session1, session2])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 2)
+        #expect(session2.prompts.count == 2)     // chunk2 retry (guardrail), chunk3 (ok)
+        #expect(cleanedCount(in: result) == 2)   // chunk1 & chunk3 cleaned; chunk2 raw
+        #expect(result.contains(chunks[1]))      // raw chunk2 present verbatim
+    }
+
     @Test("An unrecognized (non-overflow, non-timeout) session error propagates out of clean")
     func unrecognizedErrorPropagates() async {
         let input = makeThreeChunkInput()

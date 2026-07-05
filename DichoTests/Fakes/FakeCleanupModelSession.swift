@@ -20,6 +20,9 @@ final class FakeCleanupModelSession: CleanupModelSessioning {
         case sleepForever
         /// Return a string containing a schema-leakage marker (`"schema:"`).
         case succeedWithLeakage
+        /// Throw `CleanupSessionError.guardrailTriggered` (safety guardrails
+        /// refused the content).
+        case throwGuardrail
         /// Throw an arbitrary error that is neither overflow nor timeout.
         case throwOther(Error)
     }
@@ -59,6 +62,8 @@ final class FakeCleanupModelSession: CleanupModelSessioning {
             return ""
         case .succeedWithLeakage:
             return "schema: { name: CleanedText }"
+        case .throwGuardrail:
+            throw CleanupSessionError.guardrailTriggered
         case .throwOther(let error):
             throw error
         }

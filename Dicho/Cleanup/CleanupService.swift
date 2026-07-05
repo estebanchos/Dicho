@@ -83,7 +83,8 @@ final class CleanupService: CleanupServicing {
             case .cleaned(let cleanedChunk):
                 cleaned.append(cleanedChunk)
             case .rawFallback:
-                // Leakage: keep the session (it's still healthy) but insert raw.
+                // Leakage or guardrail refusal: keep the session (it's still
+                // healthy) but insert this chunk raw.
                 cleaned.append(chunk)
             case .timedOut:
                 // The session may still be responding; rotate before the next chunk.
@@ -297,7 +298,9 @@ final class CleanupService: CleanupServicing {
     private enum ChunkOutcome {
         /// The model returned usable cleaned text.
         case cleaned(String)
-        /// The model echoed system-prompt artifacts; caller should insert raw.
+        /// The model echoed system-prompt artifacts or its safety guardrails
+        /// refused the content; caller should insert the chunk raw. The session
+        /// itself is still healthy, so it is kept for later chunks.
         case rawFallback
         /// The turn exceeded `chunkTimeout`.
         case timedOut
@@ -350,6 +353,11 @@ final class CleanupService: CleanupServicing {
             return .timedOut
         } catch CleanupSessionError.contextWindowExceeded {
             return .overflowed
+        } catch CleanupSessionError.guardrailTriggered {
+            // Guardrails refused this chunk's content (possible even with the
+            // permissive-transformations model on extreme content). The chunk
+            // is inserted raw; one refusal must not degrade the whole dictation.
+            return .rawFallback
         }
     }
 }
