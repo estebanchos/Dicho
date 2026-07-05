@@ -404,6 +404,45 @@ struct CleanupServiceTests {
         #expect(instructions.localizedCaseInsensitiveContains("comma, period, or dash"))
     }
 
+    // MARK: - Split-marker self-correction (M9 round 4, 2026-07-05)
+
+    @Test("Self-correction covers markers with punctuation inside them")
+    func instructionsCoverSplitMarkerForm() {
+        // The transcriber can render the marker as "No, wait" — comma inside,
+        // capitalized, starting a new sentence. The model punctuated that form
+        // instead of applying the correction (round-3 retest).
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("no, wait"))
+    }
+
+    @Test("Self-correction shows the sentence-initial split-marker worked example")
+    func instructionsIncludeSplitMarkerExample() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("the meeting is on Tuesday. No, wait on Thursday"))
+        #expect(instructions.contains("The meeting is on Thursday"))
+    }
+
+    @Test("Self-correction shows the fully unpunctuated raw-ASR worked example")
+    func instructionsIncludeUnpunctuatedMarkerExample() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("the meeting is on Tuesday no wait on Thursday"))
+    }
+
+    @Test("Self-correction rule sits at the top of the rule list, before filler removal")
+    func selfCorrectionRuleComesFirst() {
+        // Priority position: the on-device model weights early instructions
+        // more heavily, and self-correction is the rule that keeps regressing.
+        let instructions = CleanupService.buildInstructions()
+        guard
+            let correctionRange = instructions.range(of: "self-correction", options: .caseInsensitive),
+            let fillerRange = instructions.range(of: "filler", options: .caseInsensitive)
+        else {
+            Issue.record("Expected both the self-correction and filler rules")
+            return
+        }
+        #expect(correctionRange.lowerBound < fillerRange.lowerBound)
+    }
+
     // MARK: - Contextual mis-transcription repair (M9 retest fix, 2026-07-05)
 
     @Test("Instructions include the mis-transcription repair rule with all three conditions, before FORBIDDEN")
