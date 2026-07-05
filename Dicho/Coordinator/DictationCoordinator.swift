@@ -113,9 +113,15 @@ final class DictationCoordinator {
     func handleTranscriptUpdate(_ update: TranscriptUpdate) {
         guard state == .recording || state == .transcribing else { return }
         if update.isFinal {
-            finalizedTranscript = finalizedTranscript.isEmpty
-                ? update.text
-                : finalizedTranscript + " " + update.text
+            // SpeechTranscriber final segments arrive with leading spaces; trim
+            // each segment before joining or the transcript accumulates double
+            // spaces at every segment boundary (raw mode and cleanup alike).
+            let segment = update.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !segment.isEmpty {
+                finalizedTranscript = finalizedTranscript.isEmpty
+                    ? segment
+                    : finalizedTranscript + " " + segment
+            }
             volatileText = ""
         } else if state == .recording {
             volatileText = update.text
