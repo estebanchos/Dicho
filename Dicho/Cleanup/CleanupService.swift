@@ -173,51 +173,18 @@ final class CleanupService: CleanupServicing {
         return base + "\n\n" + hint
     }
 
-    /// One-sentence target-app hint appended to the instructions. Returns `nil`
-    /// for `.generalWriting` so the prompt remains identical to the no-context
-    /// baseline when the frontmost app doesn't match any known category.
+    /// One-sentence target-app hint appended to the instructions.
+    ///
+    /// All category hints were dropped 2026-07-05 (M9 round 4, developer
+    /// decision): measured improvement from them was insignificant, and every
+    /// instruction added costs rule-following at this model size — the hint
+    /// text sometimes conflicted with the core rules outright (e.g. the notes
+    /// hint's "fragmentary phrasing is acceptable" vs. pause repair). Returning
+    /// `nil` everywhere also means the prewarmed session is never discarded at
+    /// record-stop. The `AppContext` plumbing stays so a category hint can be
+    /// reintroduced with A/B evidence; the M7 hint texts are in git history.
     static func hint(for category: AppCategory) -> String? {
-        switch category {
-        case .ide:
-            return "The user is dictating into a code editor. Preserve any token "
-                + "that looks like an identifier (camelCase, snake_case, dotted, or "
-                + "punctuated), URL, file path, or number exactly as transcribed. "
-                + "Treat ALL-CAPS acronyms (JSON, URL, HTTP, API, UUID, SQL, HTML, CSS, "
-                + "XML, REST, JWT, IDE, etc.) as identifiers — never replace them with "
-                + "homophones (e.g. JSON must never become \"Jason\"). Do NOT split a "
-                + "compound identifier into separate English words."
-        case .terminal:
-            return "The user is dictating into a terminal. Preserve commands, "
-                + "flags, paths, and shell punctuation exactly as transcribed, including "
-                + "the original spacing between tokens. Do NOT add commas, periods, or "
-                + "other punctuation between consecutive command tokens, arguments, or "
-                + "flags — terminal input has no English sentence structure."
-        case .messaging:
-            return "The user is dictating an informal message; light contractions "
-                + "are acceptable but do not change register or formality."
-        case .email:
-            return "The user is dictating an email body; standard sentence "
-                + "structure and capitalization are appropriate."
-        case .browser:
-            return "The user is dictating into a browser text area; apply default cleanup."
-        case .notes:
-            return "The user is dictating notes; brief, fragmentary phrasing is acceptable."
-        case .scriptWriting:
-            return "The user is dictating into a screenwriting app. Preserve "
-                + "*formatting tokens* exactly as transcribed: scene headings "
-                + "(INT./EXT.), character names (often ALL CAPS), parentheticals, "
-                + "transitions (CUT TO:, FADE OUT.), and other standard "
-                + "screenplay/Fountain markers. Dialogue and scene description "
-                + "are ordinary prose — still apply the same filler removal, "
-                + "self-correction, and light punctuation rules from the base "
-                + "instructions to those passages."
-        case .filmEditing:
-            return "The user is dictating into a video/film editing app; preserve "
-                + "clip names, timecodes (HH:MM:SS:FF), keyboard shortcuts, and "
-                + "numeric markers exactly as transcribed."
-        case .generalWriting:
-            return nil
-        }
+        nil
     }
 
     /// Wraps a transcript chunk in the per-request prompt.

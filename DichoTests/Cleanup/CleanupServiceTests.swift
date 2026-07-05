@@ -117,19 +117,20 @@ struct CleanupServiceTests {
         #expect(chunks.allSatisfy { $0.count <= charBudget })
     }
 
-    // MARK: - Target-app hint (7.3)
+    // MARK: - Target-app hint (7.3; all hints dropped in M9 round 4, 2026-07-05)
 
     @Test("hint(for: .generalWriting) returns nil so the prompt stays at baseline")
     func generalWritingProducesNoHint() {
         #expect(CleanupService.hint(for: .generalWriting) == nil)
     }
 
-    @Test("Every non-default category produces a non-empty hint")
-    func everyMeaningfulCategoryHasAHint() {
-        for category in AppCategory.allCases where category != .generalWriting {
-            let h = CleanupService.hint(for: category)
-            #expect(h != nil, "expected non-nil hint for \(category)")
-            #expect(h?.isEmpty == false)
+    @Test("Every category produces no hint — hints were dropped for prompt-size headroom")
+    func everyCategoryHasNoHint() {
+        // Developer decision 2026-07-05: measured improvement from the hints
+        // was insignificant, and instruction growth costs rule-following at
+        // this model size. Reintroduce a category hint only with A/B evidence.
+        for category in AppCategory.allCases {
+            #expect(CleanupService.hint(for: category) == nil, "expected nil hint for \(category)")
         }
     }
 
@@ -144,28 +145,17 @@ struct CleanupServiceTests {
         #expect(none == general)
     }
 
-    @Test(
-        "Category-specific instructions contain a distinguishing keyword from the hint",
-        arguments: [
-            (AppCategory.ide, "code editor"),
-            (.terminal, "terminal"),
-            (.messaging, "informal"),
-            (.email, "email"),
-            (.browser, "browser"),
-            (.notes, "notes"),
-            (.scriptWriting, "screenwriting"),
-            (.filmEditing, "video/film"),
-        ]
-    )
-    func categoryInstructionsContainKeyword(_ pair: (AppCategory, String)) {
-        let (category, keyword) = pair
-        let ctx = AppContext(bundleIdentifier: "x", localizedName: "x", category: category)
-        let instructions = CleanupService.buildInstructions(for: ctx)
-        #expect(instructions.localizedCaseInsensitiveContains(keyword))
+    @Test("Every category's instructions equal the baseline — no hint is appended")
+    func everyCategoryUsesBaselineInstructions() {
+        let baseline = CleanupService.buildInstructions()
+        for category in AppCategory.allCases {
+            let ctx = AppContext(bundleIdentifier: "x", localizedName: "x", category: category)
+            #expect(CleanupService.buildInstructions(for: ctx) == baseline, "expected baseline instructions for \(category)")
+        }
     }
 
-    @Test("Forbidden-actions block is preserved when a hint is appended")
-    func forbiddenActionsPreservedWithHint() {
+    @Test("Forbidden-actions block is present regardless of app context")
+    func forbiddenActionsPreservedWithContext() {
         let ide = AppContext(bundleIdentifier: "x", localizedName: "x", category: .ide)
         let instructions = CleanupService.buildInstructions(for: ide)
         // The same five forbidden keywords from the M5 contract must still be present.
@@ -183,45 +173,6 @@ struct CleanupServiceTests {
             instructions.localizedCaseInsensitiveContains("explanation") ||
             instructions.localizedCaseInsensitiveContains("preamble")
         )
-    }
-
-    @Test("Hint sits AFTER the FORBIDDEN block so it cannot override the contract")
-    func hintFollowsForbiddenBlock() {
-        let ide = AppContext(bundleIdentifier: "x", localizedName: "x", category: .ide)
-        let instructions = CleanupService.buildInstructions(for: ide)
-        guard
-            let forbiddenRange = instructions.range(of: "FORBIDDEN", options: .caseInsensitive),
-            let hintRange = instructions.range(of: "code editor", options: .caseInsensitive)
-        else {
-            Issue.record("Expected both FORBIDDEN and hint text in the instructions")
-            return
-        }
-        #expect(forbiddenRange.lowerBound < hintRange.lowerBound)
-    }
-
-    // MARK: - scriptWriting hint scoping (M7 post-verification fix, 2026-06-23)
-
-    @Test("scriptWriting hint scopes 'exactly as transcribed' to formatting tokens and preserves cleanup for dialogue/description")
-    func scriptWritingHintIsScopedCorrectly() {
-        guard let hint = CleanupService.hint(for: .scriptWriting) else {
-            Issue.record("scriptWriting hint must be non-nil")
-            return
-        }
-        // Formatting tokens must still be the things preserved.
-        #expect(hint.localizedCaseInsensitiveContains("scene"))
-        #expect(hint.localizedCaseInsensitiveContains("character"))
-        // The hint must explicitly clarify that dialogue/description still get
-        // the standard cleanup treatment, so the model does not read
-        // "exactly as transcribed" as a global override of self-correction
-        // (which is what happened during M7 Final Draft manual testing).
-        let mentionsDialogueOrDescription =
-            hint.localizedCaseInsensitiveContains("dialogue")
-            || hint.localizedCaseInsensitiveContains("description")
-        #expect(mentionsDialogueOrDescription)
-        let mentionsCleanupRules =
-            hint.localizedCaseInsensitiveContains("filler")
-            || hint.localizedCaseInsensitiveContains("self-correction")
-        #expect(mentionsCleanupRules)
     }
 
     // MARK: - Short-input bypass (M7 post-verification fix, 2026-06-23)
@@ -567,24 +518,24 @@ struct CleanupServiceSessionLifecycleTests {
         #expect(cleanedCount(in: result) == 3)
     }
 
-    @Test("A context hint discards the prewarmed session and builds a context-aware one")
-    func contextHintDiscardsPrewarmedSession() async throws {
+    @Test("An app context no longer discards the prewarmed session — hints are gone, so it is reused")
+    func appContextReusesPrewarmedSession() async throws {
+        // Inverse of the pre-round-4 behavior: with hints dropped (2026-07-05)
+        // every category's instructions equal the baseline, so the prewarmed
+        // session is never stale and no rebuild happens at record-stop.
         let input = makeThreeChunkInput()
         let prewarmed = FakeCleanupModelSession([.succeed(markCleaned)])
-        let contextAware = FakeCleanupModelSession([.succeed(markCleaned)])
-        let factory = FakeSessionFactory([prewarmed, contextAware])
+        let factory = FakeSessionFactory([prewarmed])
         let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
 
         service.prewarm()
         let email = AppContext(bundleIdentifier: "com.apple.mail", localizedName: "Mail", category: .email)
         _ = try await service.clean(input, appContext: email)
 
-        #expect(factory.sessionsCreated == 2)
-        #expect(prewarmed.prompts.isEmpty)         // discarded, never cleaned a chunk
-        #expect(contextAware.prompts.count == 3)   // served all chunks
-        let emailHint = CleanupService.hint(for: .email)
-        #expect(emailHint != nil)
-        #expect(factory.instructionsUsed.last?.contains(emailHint!) == true)
+        #expect(factory.sessionsCreated == 1)
+        #expect(prewarmed.prewarmCount == 1)
+        #expect(prewarmed.prompts.count == 3)      // served all chunks
+        #expect(factory.instructionsUsed.last == CleanupService.buildInstructions())
     }
 
     @Test("Context-window overflow rotates the session and retries the chunk")
