@@ -403,6 +403,56 @@ struct CleanupServiceTests {
         let instructions = CleanupService.buildInstructions()
         #expect(instructions.localizedCaseInsensitiveContains("comma, period, or dash"))
     }
+
+    // MARK: - Contextual mis-transcription repair (M9 retest fix, 2026-07-05)
+
+    @Test("Instructions include the mis-transcription repair rule with all three conditions, before FORBIDDEN")
+    func instructionsIncludeMisTranscriptionRepairRule() {
+        // ESL/accented speech produces near-homophone ASR errors ("take the
+        // boss" for bus) that context makes unambiguous; the model needs
+        // explicit — and tightly bounded — permission to repair them.
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("sounds like"))
+        #expect(instructions.localizedCaseInsensitiveContains("nonsensical"))
+        #expect(instructions.localizedCaseInsensitiveContains("unambiguous"))
+
+        guard
+            let ruleRange = instructions.range(of: "sounds like", options: .caseInsensitive),
+            let forbiddenRange = instructions.range(of: "FORBIDDEN")
+        else {
+            Issue.record("Expected both the repair rule and the FORBIDDEN block")
+            return
+        }
+        #expect(ruleRange.lowerBound < forbiddenRange.lowerBound)
+    }
+
+    @Test("Mis-transcription repair shows both worked examples")
+    func misTranscriptionRepairHasWorkedExamples() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("take the boss to get to town"))
+        #expect(instructions.contains("take the bus to get to town"))
+        #expect(instructions.contains("hand over every time to my mother"))
+        #expect(instructions.contains("hand over every dime to my mother"))
+    }
+
+    @Test("Mis-transcription repair carries the uncertainty guard")
+    func misTranscriptionRepairHasUncertaintyGuard() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("keep the transcribed word"))
+    }
+
+    @Test("FORBIDDEN block names the repair rule as its only exception")
+    func forbiddenBlockReferencesRepairException() {
+        // Without the cross-reference the two rules contradict and the 3B model
+        // resolves the conflict unpredictably.
+        let instructions = CleanupService.buildInstructions()
+        guard let forbiddenRange = instructions.range(of: "FORBIDDEN") else {
+            Issue.record("Expected the FORBIDDEN block")
+            return
+        }
+        let forbiddenBlock = instructions[forbiddenRange.lowerBound...]
+        #expect(forbiddenBlock.localizedCaseInsensitiveContains("mis-transcription repair"))
+    }
 }
 
 // MARK: - Session-lifecycle suite (M9, plan §A2)

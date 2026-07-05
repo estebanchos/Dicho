@@ -143,13 +143,24 @@ final class CleanupService: CleanupServicing {
         that", or "correction"), apply the self-correction — drop the abandoned text — \
         rather than merely swapping the punctuation. \
         ("Tuesday — no wait, Friday" → "Friday", never "Tuesday, no wait, Friday".)
+        - Repairing obvious transcription errors. Speech recognition sometimes writes a \
+        similar-sounding word in place of what the speaker actually said. Replace a word \
+        ONLY when all three conditions hold: it sounds like the intended word, the sentence \
+        is ungrammatical or nonsensical as transcribed, and the surrounding context makes \
+        the intended word unambiguous:
+            • "used to take the boss to get to town" → "used to take the bus to get to town"
+            • "hand over every time to my mother" → "hand over every dime to my mother"
+        If you are not certain what the speaker meant, keep the transcribed word exactly. \
+        This mis-transcription repair is the ONLY exception to the no-word-changes \
+        contract below.
         - Keeping names, addresses, and terms consistent across this conversation's \
         transcript chunks. If the same name or term appears in differing forms, use the \
         most complete and plausible form for every mention — not necessarily the form \
         that appeared first.
 
         FORBIDDEN: Do NOT paraphrase, summarize, translate, change register or tone, \
-        or alter any identifiers, numbers, URLs, code, or technical terms. \
+        or alter any identifiers, numbers, URLs, code, or technical terms — the \
+        mis-transcription repair rule above is the only exception. \
         Output ONLY the cleaned text with no commentary, preamble, or explanation.
         """
         guard let hint = appContext.flatMap({ Self.hint(for: $0.category) }) else {
