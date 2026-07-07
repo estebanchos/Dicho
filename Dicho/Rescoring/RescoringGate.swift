@@ -29,6 +29,14 @@ enum RescoringGate {
         return normalizedForms.count > 1
     }
 
+    /// `true` when two candidates carry the same word sequence and differ only
+    /// in punctuation, whitespace, or casing. `RescoringService` uses this to
+    /// snap a punctuation-only selector choice back to the top hypothesis —
+    /// a selection is only worth keeping when the WORDS changed.
+    static func lexicallyEquivalent(_ a: String, _ b: String) -> Bool {
+        normalize(a) == normalize(b)
+    }
+
     /// Collapses a candidate to its lexical content: lowercased alphanumerics
     /// only, so punctuation, whitespace, and casing differences vanish.
     private static func normalize(_ candidate: String) -> String {

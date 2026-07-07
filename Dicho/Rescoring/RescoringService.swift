@@ -138,10 +138,20 @@ final class RescoringService: RescoringServicing {
 #endif
                 return segment.text
             }
+            let chosen = segment.alternatives[index]
+            // Snap rule (field test 2026-07-07): a choice that differs from the
+            // top hypothesis only in punctuation or casing is churn, not repair
+            // — the transcriber's own punctuation is the better signal.
+            guard !RescoringGate.lexicallyEquivalent(chosen, segment.text) else {
 #if DEBUG
-            print("[DEBUG] RescoringService: selector chose index \(index): '\(segment.alternatives[index])'")
+                print("[DEBUG] RescoringService: selector chose punctuation-only variant → top hypothesis kept")
 #endif
-            return segment.alternatives[index]
+                return segment.text
+            }
+#if DEBUG
+            print("[DEBUG] RescoringService: selector chose index \(index): '\(chosen)'")
+#endif
+            return chosen
         } catch {
             // Timeout, guardrail, or any model error: the top hypothesis is
             // always an acceptable answer — rescoring is best-effort.

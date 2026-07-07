@@ -73,6 +73,16 @@ struct RescoringGateTests {
         #expect(RescoringGate.needsRescoring(u, threshold: threshold))
     }
 
+    @Test("lexicallyEquivalent treats punctuation/casing variants as the same word sequence")
+    func lexicallyEquivalentIgnoresPunctuationAndCase() {
+        #expect(RescoringGate.lexicallyEquivalent(" man.", " man,"))
+        #expect(RescoringGate.lexicallyEquivalent(" saying them.", " saying them,"))
+        #expect(RescoringGate.lexicallyEquivalent(" Deli.", " deli"))
+        #expect(!RescoringGate.lexicallyEquivalent(" gonna", " going"))
+        #expect(!RescoringGate.lexicallyEquivalent(" gotta", " got"))
+        #expect(!RescoringGate.lexicallyEquivalent(" man.", " man, you"))
+    }
+
     @Test("Lexical distinction is judged after normalization, not raw string inequality")
     func normalizationJudgesDistinction() {
         // "Deli." vs "deli" — same word; must NOT rescore.

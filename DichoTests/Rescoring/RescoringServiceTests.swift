@@ -53,6 +53,25 @@ struct RescoringServiceTests {
         #expect(factory.sessionsCreated == 1)
     }
 
+    @Test("A punctuation-only selector choice keeps the top hypothesis — no punctuation churn")
+    func punctuationOnlyChoiceKeepsTopHypothesis() async {
+        // Field test 2026-07-07: the gate fired on ' man.' because the candidate
+        // SET contained a lexically distinct entry (' man, you'), but the
+        // selector then picked ' man,' — spending a model call to degrade a
+        // sentence boundary. A choice that is lexically identical to the top
+        // hypothesis must snap back to it.
+        let session = FakeRescoringModelSession([.returnIndex(1)])
+        let factory = FakeRescoringSessionFactory([session])
+        let service = makeService(factory)
+
+        let result = await service.rescore([
+            ambiguous(" man.", alternatives: [" man.", " man,", " man, you"]),
+        ])
+
+        #expect(result == "man.")
+        #expect(session.prompts.count == 1)   // the selector DID run; the snap is post-selection
+    }
+
     @Test("An out-of-range index falls back to the top hypothesis")
     func outOfRangeIndexFallsBack() async {
         let session = FakeRescoringModelSession([.returnIndex(7)])
