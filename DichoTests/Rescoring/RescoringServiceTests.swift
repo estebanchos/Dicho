@@ -182,6 +182,24 @@ struct RescoringPromptTests {
         #expect(instructions.localizedCaseInsensitiveContains("never invent"))
     }
 
+    @Test("Instructions bias toward candidate 0 — switching needs clear justification")
+    func instructionsBiasTowardTopHypothesis() {
+        // Field test 2026-07-07: without this bias the 3B model preferred the
+        // formal variant (" gonna"→" going", " gotta"→" got"), producing
+        // ungrammatical output.
+        let instructions = RescoringService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("candidate 0"))
+        #expect(instructions.localizedCaseInsensitiveContains("most likely"))
+        #expect(instructions.localizedCaseInsensitiveContains("if unsure, answer 0"))
+    }
+
+    @Test("Instructions forbid formalizing spoken register")
+    func instructionsGuardSpokenRegister() {
+        let instructions = RescoringService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("formal"))
+        #expect(instructions.contains("gonna"))
+    }
+
     @Test("buildPrompt numbers candidates from zero and embeds the context")
     func promptEmbedsNumberedCandidates() {
         let prompt = RescoringService.buildPrompt(

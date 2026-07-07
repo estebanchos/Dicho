@@ -83,8 +83,14 @@ final class RescoringService: RescoringServicing {
         transcriptions of the SAME audio segment. Speech recognition sometimes \
         writes a similar-sounding word in place of what the speaker said; pick \
         the candidate that best fits the surrounding context — the words the \
-        speaker most plausibly said. Respond with the chosen candidate's index \
-        only. Never invent text that is not among the candidates.
+        speaker most plausibly said. Candidate 0 is the recognizer's most \
+        likely transcription: choose a different candidate ONLY when it \
+        clearly fits the context better, for example when candidate 0 is \
+        ungrammatical or nonsensical there. Never switch because another \
+        candidate sounds more formal or polished — spoken forms like "gonna" \
+        and "gotta" must stay exactly as spoken. If unsure, answer 0. Respond \
+        with the chosen candidate's index only. Never invent text that is not \
+        among the candidates.
         """
     }
 
