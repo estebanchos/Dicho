@@ -12,6 +12,31 @@ struct TranscriptUpdate: Sendable {
     let range: NSRange?
     /// Whether this result is final (true) or volatile/provisional (false).
     let isFinal: Bool
+    /// N-best candidate transcriptions for a FINAL segment, most likely first.
+    /// Mirrors `SpeechTranscriber.Result.alternatives`, which includes the
+    /// primary hypothesis at index 0 (verified in the M10 C0 spike) — so this
+    /// is the full candidate list, not extras beyond `text`. Empty for
+    /// volatile results and when the engine doesn't report alternatives.
+    let alternatives: [String]
+    /// Minimum per-run transcription confidence for a FINAL segment (0…1);
+    /// nil for volatile results or engines without confidence reporting.
+    /// The minimum — not the average — is the rescoring gate signal: one
+    /// uncertain word makes the whole segment a rescoring candidate.
+    let confidence: Double?
+
+    init(
+        text: String,
+        range: NSRange?,
+        isFinal: Bool,
+        alternatives: [String] = [],
+        confidence: Double? = nil
+    ) {
+        self.text = text
+        self.range = range
+        self.isFinal = isFinal
+        self.alternatives = alternatives
+        self.confidence = confidence
+    }
 }
 
 /// Protocol seam for on-device speech transcription. Production type: `TranscriptionEngine`.

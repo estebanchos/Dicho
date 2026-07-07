@@ -41,11 +41,14 @@ final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendabl
         // accurate results" — smaller context window, per Apple docs). Dictation
         // inserts the FINAL transcript, so accuracy wins; volatileResults alone
         // keeps the live HUD text. (OPTIMIZATIONS.md #4, folded into M9.)
+        // alternativeTranscriptions + transcriptionConfidence feed the M10
+        // rescoring gate; the C0 spike (2026-07-06) verified all three options
+        // coexist — volatile updates keep flowing, finals carry alternatives.
         let transcriber = SpeechTranscriber(
             locale: locale,
             transcriptionOptions: [],
-            reportingOptions: [.volatileResults],
-            attributeOptions: []
+            reportingOptions: [.volatileResults, .alternativeTranscriptions],
+            attributeOptions: [.transcriptionConfidence]
         )
 
         // Ensure assets are installed; download if needed.
@@ -97,10 +100,25 @@ final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendabl
             do {
                 for try await result in transcriber.results {
                     let text = String(result.text.characters)
+                    // Alternatives and confidence are meaningful on finals only:
+                    // volatile results carry a single echo alternative and no
+                    // confidence attribute (C0 spike, 2026-07-06).
+                    let alternatives = result.isFinal
+                        ? result.alternatives.map { String($0.characters) }
+                        : []
+                    let confidence = result.isFinal
+                        ? Self.minimumConfidence(in: result.text)
+                        : nil
 #if DEBUG
-                    print("[DEBUG] TranscriptionEngine: result isFinal=\(result.isFinal) text='\(text)'")
+                    print("[DEBUG] TranscriptionEngine: result isFinal=\(result.isFinal) text='\(text)' alternatives=\(alternatives.count) confidence=\(confidence.map { String(format: "%.2f", $0) } ?? "nil")")
 #endif
-                    continuation?.yield(TranscriptUpdate(text: text, range: nil, isFinal: result.isFinal))
+                    continuation?.yield(TranscriptUpdate(
+                        text: text,
+                        range: nil,
+                        isFinal: result.isFinal,
+                        alternatives: alternatives,
+                        confidence: confidence
+                    ))
                 }
 #if DEBUG
                 print("[DEBUG] TranscriptionEngine: results stream ended")
@@ -142,6 +160,22 @@ final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendabl
         // Signal end of this session's updates stream so the coordinator's
         // transcriptTask exits naturally after draining any remaining buffered results.
         savedContinuation?.finish()
+    }
+
+    // MARK: - Internal — exposed for unit tests (pure, no live Speech calls)
+
+    /// The lowest per-run `transcriptionConfidence` in an attributed
+    /// transcription result, or nil when no run carries the attribute
+    /// (volatile results never do; finals always did in the C0 spike).
+    /// The minimum is the rescoring-gate signal: one uncertain word makes
+    /// the whole segment a rescoring candidate.
+    static func minimumConfidence(in text: AttributedString) -> Double? {
+        var minimum: Double?
+        for (value, _) in text.runs[AttributeScopes.SpeechAttributes.ConfidenceAttribute.self] {
+            guard let value else { continue }
+            minimum = min(minimum ?? value, value)
+        }
+        return minimum
     }
 
     // MARK: - Private
