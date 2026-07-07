@@ -34,4 +34,29 @@ enum Constants {
     /// single-token input. Single-word inputs barely benefit from cleanup,
     /// so the trade-off is favorable.
     static let cleanupMinWordsForCleanup: Int = 2
+
+    /// Minimum-run-confidence threshold below which a finalized transcript
+    /// segment becomes a rescoring candidate (see `RescoringGate`). Segments
+    /// at or above the threshold always pass through as the transcriber's top
+    /// hypothesis. Initially 0.85 from the C0 spike; lowered to 0.70 after the
+    /// round-2 field test (2026-07-07): every firing in the 0.70–0.85 band
+    /// produced no change (or a selector miss), so the band cost latency for
+    /// zero quality — all real wins occurred below 0.70.
+    static let rescoringConfidenceThreshold: Double = 0.70
+
+    /// Per-segment timeout for the rescoring selector (`RescoringService`).
+    /// Selection is a single small guided-generation turn (an index), so it
+    /// should complete well under this; on expiry the segment keeps the
+    /// transcriber's top hypothesis. Bounded so rescoring can never noticeably
+    /// delay insertion even with several ambiguous segments.
+    static let rescoringSegmentTimeout: TimeInterval = 2.0
+
+    /// Maximum rescoring selections in flight at once. The on-device model's
+    /// request queue serializes generations, so launching every selection
+    /// simultaneously starves the tail — selections at the back of the queue
+    /// hit `rescoringSegmentTimeout` before ever running (observed in the M10
+    /// round-3 field test: 12 concurrent firings, zero successful selections).
+    /// A small window keeps most of the concurrency latency win while
+    /// guaranteeing each selection actually executes.
+    static let rescoringMaxConcurrentSelections: Int = 3
 }

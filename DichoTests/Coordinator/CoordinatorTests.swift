@@ -10,21 +10,24 @@ private func makeCoordinator(rawMode: Bool = false) -> (
     audio: FakeAudioCapture,
     transcription: FakeTranscriptionEngine,
     cleanup: FakeCleanupService,
-    insertion: FakeTextInserter
+    insertion: FakeTextInserter,
+    rescoring: FakeRescoringService
 ) {
     let audio = FakeAudioCapture()
     let transcription = FakeTranscriptionEngine()
     let cleanup = FakeCleanupService()
     let insertion = FakeTextInserter()
+    let rescoring = FakeRescoringService()
     let coordinator = DictationCoordinator(
         hotkeyMonitor: FakeHotkeyMonitor(),
         audioCapture: audio,
         transcriptionEngine: transcription,
         cleanupService: cleanup,
         textInserter: insertion,
+        rescoringService: rescoring,
         isRawMode: rawMode
     )
-    return (coordinator, audio, transcription, cleanup, insertion)
+    return (coordinator, audio, transcription, cleanup, insertion, rescoring)
 }
 
 @MainActor
@@ -44,6 +47,7 @@ private func makeCoordinatorWithProvider(
         transcriptionEngine: FakeTranscriptionEngine(),
         cleanupService: cleanup,
         textInserter: insertion,
+        rescoringService: FakeRescoringService(),
         activeAppProvider: provider,
         isRawMode: rawMode
     )
@@ -60,20 +64,20 @@ struct CoordinatorTests {
 
     @Test("Starts in idle state")
     func initialStateIsIdle() {
-        let (coordinator, _, _, _, _) = makeCoordinator()
+        let (coordinator, _, _, _, _, _) = makeCoordinator()
         #expect(coordinator.state == .idle)
     }
 
     @Test("startRequested from idle → recording")
     func idleToRecording() async {
-        let (coordinator, _, _, _, _) = makeCoordinator()
+        let (coordinator, _, _, _, _, _) = makeCoordinator()
         await coordinator.handleHotkeyEvent(.startRequested)
         #expect(coordinator.state == .recording)
     }
 
     @Test("startRequested while already recording is ignored")
     func doubleStartIgnored() async {
-        let (coordinator, _, _, _, _) = makeCoordinator()
+        let (coordinator, _, _, _, _, _) = makeCoordinator()
         await coordinator.handleHotkeyEvent(.startRequested)
         await coordinator.handleHotkeyEvent(.startRequested)
         #expect(coordinator.state == .recording)
@@ -81,7 +85,7 @@ struct CoordinatorTests {
 
     @Test("stopRequested from idle is ignored")
     func stopFromIdleIgnored() async {
-        let (coordinator, _, _, _, _) = makeCoordinator()
+        let (coordinator, _, _, _, _, _) = makeCoordinator()
         await coordinator.handleHotkeyEvent(.stopRequested)
         #expect(coordinator.state == .idle)
     }
@@ -90,7 +94,7 @@ struct CoordinatorTests {
 
     @Test("Happy path: start → final transcript → stop → cleaned text inserted → idle")
     func happyPath() async {
-        let (coordinator, _, transcription, cleanup, insertion) = makeCoordinator()
+        let (coordinator, _, transcription, cleanup, insertion, _) = makeCoordinator()
         cleanup.stubbedResult = "cleaned text"
 
         await coordinator.handleHotkeyEvent(.startRequested)
@@ -105,7 +109,7 @@ struct CoordinatorTests {
 
     @Test("Multiple final segments are concatenated before cleanup")
     func multipleFinalSegmentsConcatenated() async {
-        let (coordinator, _, _, cleanup, _) = makeCoordinator()
+        let (coordinator, _, _, cleanup, _, _) = makeCoordinator()
 
         await coordinator.handleHotkeyEvent(.startRequested)
         coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "hello", range: nil, isFinal: true))
@@ -117,7 +121,7 @@ struct CoordinatorTests {
 
     @Test("Final segments with SpeechTranscriber-style leading spaces join with single separators")
     func segmentLeadingSpacesNormalized() async {
-        let (coordinator, _, _, cleanup, _) = makeCoordinator()
+        let (coordinator, _, _, cleanup, _, _) = makeCoordinator()
 
         await coordinator.handleHotkeyEvent(.startRequested)
         // SpeechTranscriber final segments carry leading spaces; joining them
@@ -131,7 +135,7 @@ struct CoordinatorTests {
 
     @Test("Whitespace-only final segments do not inject separators")
     func whitespaceOnlySegmentsIgnored() async {
-        let (coordinator, _, _, cleanup, _) = makeCoordinator()
+        let (coordinator, _, _, cleanup, _, _) = makeCoordinator()
 
         await coordinator.handleHotkeyEvent(.startRequested)
         coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "hello", range: nil, isFinal: true))
@@ -144,7 +148,7 @@ struct CoordinatorTests {
 
     @Test("Volatile updates are not accumulated into the transcript")
     func volatileUpdatesNotAccumulated() async {
-        let (coordinator, _, _, cleanup, _) = makeCoordinator()
+        let (coordinator, _, _, cleanup, _, _) = makeCoordinator()
 
         await coordinator.handleHotkeyEvent(.startRequested)
         coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "volatile", range: nil, isFinal: false))
@@ -154,11 +158,60 @@ struct CoordinatorTests {
         #expect(cleanup.lastCleanedText == "final")
     }
 
+    // MARK: Rescoring integration (M10, TASKS.md 10.5)
+
+    @Test("Rescoring receives every final segment at stop and its output feeds cleanup")
+    func rescoringFeedsCleanup() async {
+        let (coordinator, _, _, cleanup, _, rescoring) = makeCoordinator()
+        rescoring.stubbedResult = "rescored transcript"
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(
+            text: " I worked at the local", range: nil, isFinal: true, alternatives: [" I worked at the local"], confidence: 0.99
+        ))
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(
+            text: " daily", range: nil, isFinal: true, alternatives: [" daily", " deli"], confidence: 0.5
+        ))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(rescoring.rescoreCallCount == 1)
+        #expect(rescoring.lastSegments.count == 2)
+        #expect(rescoring.lastSegments.last?.alternatives == [" daily", " deli"])
+        #expect(cleanup.lastCleanedText == "rescored transcript")
+    }
+
+    @Test("Rescoring is prewarmed when recording starts — raw mode included")
+    func rescoringPrewarmedOnStart() async {
+        let (normal, _, _, _, _, normalRescoring) = makeCoordinator()
+        await normal.handleHotkeyEvent(.startRequested)
+        #expect(normalRescoring.prewarmCount == 1)
+
+        let (raw, _, _, _, _, rawRescoring) = makeCoordinator(rawMode: true)
+        await raw.handleHotkeyEvent(.startRequested)
+        #expect(rawRescoring.prewarmCount == 1)
+    }
+
+    @Test("Cancel discards accumulated segments — a new dictation starts clean")
+    func cancelDiscardsSegments() async {
+        let (coordinator, _, _, _, _, rescoring) = makeCoordinator()
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "stale", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.cancelRequested)
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "fresh", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(rescoring.lastSegments.count == 1)
+        #expect(rescoring.lastSegments.first?.text == "fresh")
+    }
+
     // MARK: Raw mode (error-policy: FM bypass)
 
     @Test("Raw mode skips cleaning and inserts transcript directly")
     func rawModeBypassesCleanup() async {
-        let (coordinator, _, _, cleanup, insertion) = makeCoordinator(rawMode: true)
+        let (coordinator, _, _, cleanup, insertion, _) = makeCoordinator(rawMode: true)
 
         await coordinator.handleHotkeyEvent(.startRequested)
         coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "raw text", range: nil, isFinal: true))
@@ -169,11 +222,24 @@ struct CoordinatorTests {
         #expect(insertion.insertedText == "raw text")
     }
 
+    @Test("Raw mode inserts the rescored transcript — rescoring is transcription-layer, not cleanup")
+    func rawModeInsertsRescoredText() async {
+        let (coordinator, _, _, cleanup, insertion, rescoring) = makeCoordinator(rawMode: true)
+        rescoring.stubbedResult = "rescored raw"
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: " raw text", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(cleanup.cleanCallCount == 0)
+        #expect(insertion.insertedText == "rescored raw")
+    }
+
     // MARK: Cancellation (error-policy rows 1 & 2 in ARCHITECTURE.md)
 
     @Test("Esc during recording → idle, nothing inserted")
     func escDuringRecording() async {
-        let (coordinator, _, transcription, _, insertion) = makeCoordinator()
+        let (coordinator, _, transcription, _, insertion, _) = makeCoordinator()
 
         await coordinator.handleHotkeyEvent(.startRequested)
         coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "some text", range: nil, isFinal: true))
@@ -188,7 +254,7 @@ struct CoordinatorTests {
 
     @Test("Cancel during transcribing → idle, nothing inserted")
     func cancelDuringTranscribing() async {
-        let (coordinator, _, _, _, insertion) = makeCoordinator()
+        let (coordinator, _, _, _, insertion, _) = makeCoordinator()
 
         // Drive coordinator into transcribing by calling handleHotkeyEvent(.stopRequested),
         // but simulate cancel arriving while in that state by calling cancelRecording path.
@@ -208,7 +274,7 @@ struct CoordinatorTests {
 
     @Test("Stop with no transcript → idle, nothingHeard notice, no insertion")
     func emptyTranscriptFiresNotice() async {
-        let (coordinator, _, _, _, insertion) = makeCoordinator()
+        let (coordinator, _, _, _, insertion, _) = makeCoordinator()
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
 
@@ -223,7 +289,7 @@ struct CoordinatorTests {
 
     @Test("Stop with only volatile (no final) transcript → idle, nothingHeard notice")
     func onlyVolatileTranscriptIsEmpty() async {
-        let (coordinator, _, _, _, insertion) = makeCoordinator()
+        let (coordinator, _, _, _, insertion, _) = makeCoordinator()
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
 
@@ -240,7 +306,7 @@ struct CoordinatorTests {
 
     @Test("CleanupError.unavailable → insert raw transcript + cleanupUnavailable notice")
     func fmUnavailableInsertsRaw() async {
-        let (coordinator, _, _, cleanup, insertion) = makeCoordinator()
+        let (coordinator, _, _, cleanup, insertion, _) = makeCoordinator()
         cleanup.stubbedError = CleanupError.unavailable
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
@@ -258,7 +324,7 @@ struct CoordinatorTests {
 
     @Test("Cleanup error other than unavailable → insert raw transcript")
     func cleanupErrorFallsBackToRaw() async {
-        let (coordinator, _, _, cleanup, insertion) = makeCoordinator()
+        let (coordinator, _, _, cleanup, insertion, _) = makeCoordinator()
         cleanup.stubbedError = CleanupError.timeout
 
         await coordinator.handleHotkeyEvent(.startRequested)
@@ -273,7 +339,7 @@ struct CoordinatorTests {
 
     @Test("Insertion failure → idle, insertionFailed notice")
     func insertionFailureFiresNotice() async {
-        let (coordinator, _, _, _, insertion) = makeCoordinator()
+        let (coordinator, _, _, _, insertion, _) = makeCoordinator()
         insertion.stubbedError = InsertionError.accessibilityUnavailable
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
@@ -288,7 +354,7 @@ struct CoordinatorTests {
 
     @Test("noFocusedTextField insertion error → idle, insertionFailed notice")
     func noFocusedFieldFiresNotice() async {
-        let (coordinator, _, _, _, insertion) = makeCoordinator()
+        let (coordinator, _, _, _, insertion, _) = makeCoordinator()
         insertion.stubbedError = InsertionError.noFocusedTextField
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
@@ -305,7 +371,7 @@ struct CoordinatorTests {
 
     @Test("startCapture() throws → idle, audioCaptureFailed notice, nothing inserted")
     func audioStartFailureGoesToIdle() async {
-        let (coordinator, audio, _, _, insertion) = makeCoordinator()
+        let (coordinator, audio, _, _, insertion, _) = makeCoordinator()
         audio.startError = .deviceLost
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
@@ -319,7 +385,7 @@ struct CoordinatorTests {
 
     @Test("startCapture() throws permissionMissing → microphonePermissionMissing notice, not the generic audioCaptureFailed")
     func micPermissionMissingFiresSpecificNotice() async {
-        let (coordinator, audio, _, _, insertion) = makeCoordinator()
+        let (coordinator, audio, _, _, insertion, _) = makeCoordinator()
         audio.startError = .permissionMissing
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
@@ -334,7 +400,7 @@ struct CoordinatorTests {
 
     @Test("transcriptionEngine.start() throws → idle, audioCaptureFailed notice")
     func transcriptionStartFailureGoesToIdle() async {
-        let (coordinator, _, transcription, _, insertion) = makeCoordinator()
+        let (coordinator, _, transcription, _, insertion, _) = makeCoordinator()
         transcription.shouldThrowOnStart = AudioCaptureError.deviceLost
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
@@ -348,7 +414,7 @@ struct CoordinatorTests {
 
     @Test("Mic lost mid-recording with partial transcript → partial text inserted, notice")
     func micLostWithPartialTranscriptInsertsPartial() async {
-        let (coordinator, audio, _, _, insertion) = makeCoordinator(rawMode: true)
+        let (coordinator, audio, _, _, insertion, _) = makeCoordinator(rawMode: true)
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
 
@@ -364,7 +430,7 @@ struct CoordinatorTests {
 
     @Test("Mic lost mid-recording with no transcript → idle, no insertion, notice")
     func micLostNoTranscriptNoInsertion() async {
-        let (coordinator, audio, _, _, insertion) = makeCoordinator()
+        let (coordinator, audio, _, _, insertion, _) = makeCoordinator()
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
 
@@ -381,7 +447,7 @@ struct CoordinatorTests {
 
     @Test("Volatile update while recording sets volatileText on coordinator")
     func volatileUpdateSetsVolatileText() async {
-        let (coordinator, _, _, _, _) = makeCoordinator()
+        let (coordinator, _, _, _, _, _) = makeCoordinator()
 
         await coordinator.handleHotkeyEvent(.startRequested)
         coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "tentative", range: nil, isFinal: false))
@@ -391,7 +457,7 @@ struct CoordinatorTests {
 
     @Test("Stop clears volatileText")
     func stopClearsVolatileText() async {
-        let (coordinator, _, _, _, _) = makeCoordinator()
+        let (coordinator, _, _, _, _, _) = makeCoordinator()
 
         await coordinator.handleHotkeyEvent(.startRequested)
         coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "tentative", range: nil, isFinal: false))
@@ -404,7 +470,7 @@ struct CoordinatorTests {
 
     @Test("Final transcript delivered by engine during stop() is accumulated and inserted")
     func finalTranscriptFromStopIsInserted() async {
-        let (coordinator, _, transcription, _, insertion) = makeCoordinator(rawMode: true)
+        let (coordinator, _, transcription, _, insertion, _) = makeCoordinator(rawMode: true)
         // Simulates the production case: no isFinal results during recording;
         // the transcript arrives only when the engine finalizes on stop.
         transcription.stubbedFinalTranscript = "finalized during stop"
@@ -421,7 +487,7 @@ struct CoordinatorTests {
 
     @Test("Recording exposes finalized + volatile transcript to the HUD")
     func recordingExposesFinalizedTranscriptToHUD() async {
-        let (coordinator, _, _, _, _) = makeCoordinator()
+        let (coordinator, _, _, _, _, _) = makeCoordinator()
 
         await coordinator.handleHotkeyEvent(.startRequested)
         coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "hello", range: nil, isFinal: true))
@@ -435,7 +501,7 @@ struct CoordinatorTests {
 
     @Test("Insertion failure publishes activeNotice for HUD to render")
     func insertionFailureSetsActiveNotice() async {
-        let (coordinator, _, _, _, insertion) = makeCoordinator()
+        let (coordinator, _, _, _, insertion, _) = makeCoordinator()
         insertion.stubbedError = InsertionError.accessibilityUnavailable
 
         await coordinator.handleHotkeyEvent(.startRequested)
@@ -447,7 +513,7 @@ struct CoordinatorTests {
 
     @Test("Empty transcript publishes nothingHeard as activeNotice")
     func emptyTranscriptSetsActiveNotice() async {
-        let (coordinator, _, _, _, _) = makeCoordinator()
+        let (coordinator, _, _, _, _, _) = makeCoordinator()
 
         await coordinator.handleHotkeyEvent(.startRequested)
         await coordinator.handleHotkeyEvent(.stopRequested)
@@ -457,7 +523,7 @@ struct CoordinatorTests {
 
     @Test("Successful insertion does not set activeNotice")
     func successfulInsertionLeavesNoticeNil() async {
-        let (coordinator, _, _, _, _) = makeCoordinator(rawMode: true)
+        let (coordinator, _, _, _, _, _) = makeCoordinator(rawMode: true)
 
         await coordinator.handleHotkeyEvent(.startRequested)
         coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "ok", range: nil, isFinal: true))
@@ -470,14 +536,14 @@ struct CoordinatorTests {
 
     @Test("prewarm called on cleanup service when recording starts in non-raw mode")
     func prewarmCalledOnRecordingStart() async {
-        let (coordinator, _, _, cleanup, _) = makeCoordinator(rawMode: false)
+        let (coordinator, _, _, cleanup, _, _) = makeCoordinator(rawMode: false)
         await coordinator.handleHotkeyEvent(.startRequested)
         #expect(cleanup.prewarmCallCount == 1)
     }
 
     @Test("prewarm not called when raw mode is active")
     func prewarmNotCalledInRawMode() async {
-        let (coordinator, _, _, cleanup, _) = makeCoordinator(rawMode: true)
+        let (coordinator, _, _, cleanup, _, _) = makeCoordinator(rawMode: true)
         await coordinator.handleHotkeyEvent(.startRequested)
         #expect(cleanup.prewarmCallCount == 0)
     }
@@ -486,7 +552,7 @@ struct CoordinatorTests {
 
     @Test("accessibilityRevoked event fires accessibilityPermissionMissing notice from idle")
     func accessibilityRevokedFiresNotice() async {
-        let (coordinator, _, _, _, _) = makeCoordinator()
+        let (coordinator, _, _, _, _, _) = makeCoordinator()
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
 
@@ -498,7 +564,7 @@ struct CoordinatorTests {
 
     @Test("accessibilityRevoked during recording fires notice and leaves state unchanged")
     func accessibilityRevokedDuringRecordingFiresNotice() async {
-        let (coordinator, _, _, _, _) = makeCoordinator()
+        let (coordinator, _, _, _, _, _) = makeCoordinator()
         var notices: [DictationNotice] = []
         coordinator.onNotice = { notices.append($0) }
 
@@ -580,7 +646,7 @@ struct CoordinatorTests {
     @Test("Coordinator without an injected provider passes appContext: nil to cleanup")
     func missingProviderDefaultsToNil() async {
         // Reuses the existing makeCoordinator helper (no provider injected).
-        let (coordinator, _, _, cleanup, _) = makeCoordinator()
+        let (coordinator, _, _, cleanup, _, _) = makeCoordinator()
 
         await coordinator.handleHotkeyEvent(.startRequested)
         coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "hello", range: nil, isFinal: true))
