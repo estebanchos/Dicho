@@ -34,4 +34,12 @@ enum Constants {
     /// single-token input. Single-word inputs barely benefit from cleanup,
     /// so the trade-off is favorable.
     static let cleanupMinWordsForCleanup: Int = 2
+
+    /// Minimum-run-confidence threshold below which a finalized transcript
+    /// segment becomes a rescoring candidate (see `RescoringGate`). Segments
+    /// at or above the threshold always pass through as the transcriber's top
+    /// hypothesis. Initial value chosen from the M10 C0 spike (2026-07-06):
+    /// clean speech scored 0.84–1.00 while the one genuinely ambiguous segment
+    /// scored 0.76 — tuned against real dictation in the 10.6 manual A/B.
+    static let rescoringConfidenceThreshold: Double = 0.85
 }
