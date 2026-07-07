@@ -79,20 +79,36 @@ final class RescoringService: RescoringServicing {
         // model's choice for gate-flagged segments as selections complete.
         var chosen = segments.map(\.text)
         let modelAvailable = isModelAvailable()
-        await withTaskGroup(of: (Int, String).self) { group in
-            for (index, segment) in segments.enumerated()
-            where modelAvailable && RescoringGate.needsRescoring(segment, threshold: threshold) {
+        let flagged: [(index: Int, segment: TranscriptUpdate, session: any RescoringModelSessioning)] =
+            segments.enumerated().compactMap { index, segment in
+                guard modelAvailable,
+                      RescoringGate.needsRescoring(segment, threshold: threshold) else { return nil }
 #if DEBUG
                 print("[DEBUG] RescoringService: gate FIRED for '\(segment.text)' (confidence=\(segment.confidence.map { String(format: "%.2f", $0) } ?? "nil"), \(segment.alternatives.count) candidates)")
 #endif
-                let session = takeSession()
+                return (index, segment, takeSession())
+            }
+
+        // Sliding window: at most `rescoringMaxConcurrentSelections` in flight.
+        // Launching everything at once starved the on-device model's request
+        // queue — later selections timed out before ever running (round-3
+        // field test, 2026-07-07: 12 firings, zero successful selections).
+        await withTaskGroup(of: (Int, String).self) { group in
+            var next = 0
+            func launchNext() {
+                guard next < flagged.count else { return }
+                let (index, segment, session) = flagged[next]
                 let context = contexts[index]
+                next += 1
                 group.addTask { [segmentTimeout] in
                     (index, await Self.select(segment, session: session, context: context, timeout: segmentTimeout))
                 }
             }
+
+            for _ in 0..<Constants.rescoringMaxConcurrentSelections { launchNext() }
             for await (index, text) in group {
                 chosen[index] = text
+                launchNext()
             }
         }
 

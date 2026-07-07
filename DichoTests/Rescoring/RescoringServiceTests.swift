@@ -191,6 +191,38 @@ struct RescoringServiceTests {
         #expect(elapsed < .milliseconds(850), "selections appear to run serially: \(elapsed)")
     }
 
+    @Test("Concurrency is bounded — a fourth selection waits for a window slot")
+    func selectionsUseBoundedWindow() async {
+        // Round-3 field test: launching ALL selections at once starved the
+        // on-device model queue — later selections timed out before running
+        // (12 gate firings, zero successful selections). With a window of 3
+        // and four sleeping sessions on a 0.4 s timeout: full-parallel would
+        // finish in ~0.4 s, serial in ~1.6 s; the window finishes in ~0.8 s
+        // (two windows). The lower bound proves boundedness, the upper bound
+        // proves it isn't serial.
+        let factory = FakeRescoringSessionFactory([
+            FakeRescoringModelSession([.sleepForever]),
+            FakeRescoringModelSession([.sleepForever]),
+            FakeRescoringModelSession([.sleepForever]),
+            FakeRescoringModelSession([.sleepForever]),
+        ])
+        let service = makeService(factory, timeout: 0.4)
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        let result = await service.rescore([
+            ambiguous(" one", alternatives: [" one", " won"]),
+            ambiguous(" two", alternatives: [" two", " too"]),
+            ambiguous(" four", alternatives: [" four", " for"]),
+            ambiguous(" eight", alternatives: [" eight", " ate"]),
+        ])
+        let elapsed = clock.now - start
+
+        #expect(result == "one two four eight")
+        #expect(elapsed > .milliseconds(700), "fourth selection did not wait for a slot: \(elapsed)")
+        #expect(elapsed < .milliseconds(1400), "selections appear to run serially: \(elapsed)")
+    }
+
     @Test("Model unavailable degrades to pure pass-through")
     func modelUnavailablePassesThrough() async {
         let factory = FakeRescoringSessionFactory([])

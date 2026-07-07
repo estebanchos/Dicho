@@ -50,4 +50,13 @@ enum Constants {
     /// transcriber's top hypothesis. Bounded so rescoring can never noticeably
     /// delay insertion even with several ambiguous segments.
     static let rescoringSegmentTimeout: TimeInterval = 2.0
+
+    /// Maximum rescoring selections in flight at once. The on-device model's
+    /// request queue serializes generations, so launching every selection
+    /// simultaneously starves the tail — selections at the back of the queue
+    /// hit `rescoringSegmentTimeout` before ever running (observed in the M10
+    /// round-3 field test: 12 concurrent firings, zero successful selections).
+    /// A small window keeps most of the concurrency latency win while
+    /// guaranteeing each selection actually executes.
+    static let rescoringMaxConcurrentSelections: Int = 3
 }
