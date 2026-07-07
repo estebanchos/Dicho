@@ -110,7 +110,15 @@ final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendabl
                         ? Self.minimumConfidence(in: result.text)
                         : nil
 #if DEBUG
-                    print("[DEBUG] TranscriptionEngine: result isFinal=\(result.isFinal) text='\(text)' alternatives=\(alternatives.count) confidence=\(confidence.map { String(format: "%.2f", $0) } ?? "nil")")
+                    print("[DEBUG] TranscriptionEngine: result isFinal=\(result.isFinal) text='\(text)' confidence=\(confidence.map { String(format: "%.2f", $0) } ?? "nil")")
+                    if result.isFinal && alternatives.count > 1 {
+                        // Manual A/B aid (10.6): show the full candidate list so the
+                        // kill-criterion check can see whether the correct word was
+                        // available to the selector.
+                        for (i, alt) in alternatives.enumerated() {
+                            print("[DEBUG]   candidate \(i): '\(alt)'")
+                        }
+                    }
 #endif
                     continuation?.yield(TranscriptUpdate(
                         text: text,

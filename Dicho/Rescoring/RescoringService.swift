@@ -110,6 +110,9 @@ final class RescoringService: RescoringServicing {
               RescoringGate.needsRescoring(segment, threshold: threshold) else {
             return segment.text
         }
+#if DEBUG
+        print("[DEBUG] RescoringService: gate FIRED for '\(segment.text)' (confidence=\(segment.confidence.map { String(format: "%.2f", $0) } ?? "nil"), \(segment.alternatives.count) candidates)")
+#endif
 
         let session = takeSession()
         let prompt = Self.buildPrompt(
@@ -130,12 +133,21 @@ final class RescoringService: RescoringServicing {
                 return result
             }
             guard segment.alternatives.indices.contains(index) else {
+#if DEBUG
+                print("[DEBUG] RescoringService: selector index \(index) out of range → top hypothesis kept")
+#endif
                 return segment.text
             }
+#if DEBUG
+            print("[DEBUG] RescoringService: selector chose index \(index): '\(segment.alternatives[index])'")
+#endif
             return segment.alternatives[index]
         } catch {
             // Timeout, guardrail, or any model error: the top hypothesis is
             // always an acceptable answer — rescoring is best-effort.
+#if DEBUG
+            print("[DEBUG] RescoringService: selection failed (timeout/error) → top hypothesis kept")
+#endif
             return segment.text
         }
     }
