@@ -17,6 +17,11 @@ final class DictationCoordinator {
     /// Rendered at full opacity in the HUD; concatenated with `volatileText`
     /// (dimmed) to form the live preview. Cleared on start, stop, and cancel.
     private(set) var finalizedTranscript: String = ""
+
+    /// Finalized segments with their n-best alternatives and confidence,
+    /// accumulated for the stop-time rescoring pass (M10). `finalizedTranscript`
+    /// remains the plain-string mirror for the HUD and error paths.
+    private var finalizedSegments: [TranscriptUpdate] = []
     /// Current volatile (provisional) transcript text; empty when not recording.
     private(set) var volatileText: String = ""
     /// Last fired notice, surfaced to the HUD for transient display.
@@ -37,6 +42,7 @@ final class DictationCoordinator {
     private let transcriptionEngine: any TranscriptionEngineProtocol
     private let cleanupService: any CleanupServicing
     private let textInserter: any TextInserting
+    private let rescoringService: any RescoringServicing
     private let activeAppProvider: (any ActiveAppProviding)?
 
     // MARK: - Internal pipeline state
@@ -54,6 +60,7 @@ final class DictationCoordinator {
         transcriptionEngine: any TranscriptionEngineProtocol,
         cleanupService: any CleanupServicing,
         textInserter: any TextInserting,
+        rescoringService: any RescoringServicing,
         activeAppProvider: (any ActiveAppProviding)? = nil,
         isRawMode: Bool = false
     ) {
@@ -62,6 +69,7 @@ final class DictationCoordinator {
         self.transcriptionEngine = transcriptionEngine
         self.cleanupService = cleanupService
         self.textInserter = textInserter
+        self.rescoringService = rescoringService
         self.activeAppProvider = activeAppProvider
         self.isRawMode = isRawMode
     }
@@ -113,6 +121,10 @@ final class DictationCoordinator {
     func handleTranscriptUpdate(_ update: TranscriptUpdate) {
         guard state == .recording || state == .transcribing else { return }
         if update.isFinal {
+            // Full updates (with alternatives + confidence) accumulate for the
+            // stop-time rescoring pass; the string mirror below feeds the HUD
+            // and the audio-error partial-insert path.
+            finalizedSegments.append(update)
             // SpeechTranscriber final segments arrive with leading spaces; trim
             // each segment before joining or the transcript accumulates double
             // spaces at every segment boundary (raw mode and cleanup alike).
@@ -147,6 +159,9 @@ final class DictationCoordinator {
         if !isRawMode {
             cleanupService.prewarm()
         }
+        // Rescoring applies in raw mode too (transcription-layer repair, not
+        // cleanup), so its selector prewarms regardless of the mode.
+        rescoringService.prewarm()
 
         do {
             // TranscriptionEngine.start() must run first: it calls audioCapture.beginSession()
@@ -163,6 +178,7 @@ final class DictationCoordinator {
         }
 
         finalizedTranscript = ""
+        finalizedSegments = []
         state = .recording
 
         transcriptTask = Task { [weak self] in
@@ -212,8 +228,17 @@ final class DictationCoordinator {
         // Guard against a cancel event arriving during the above awaits.
         guard state == .transcribing else { return }
 
-        let transcript = finalizedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let segments = finalizedSegments
+        finalizedSegments = []
         finalizedTranscript = ""
+
+        // Rescoring pass (M10): resolve ambiguous segments to their best
+        // n-best candidate before cleanup. Total and non-throwing — worst
+        // case it returns the transcriber's top hypotheses reassembled.
+        let transcript = await rescoringService.rescore(segments)
+
+        // Guard against a cancel arriving during the rescoring await.
+        guard state == .transcribing else { return }
 
         guard !transcript.isEmpty else {
             state = .idle
@@ -227,6 +252,7 @@ final class DictationCoordinator {
     private func cancelRecording() {
         state = .idle
         finalizedTranscript = ""
+        finalizedSegments = []
         volatileText = ""
         audioCapture.stopCapture()
         transcriptTask?.cancel()

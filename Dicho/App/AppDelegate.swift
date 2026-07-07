@@ -164,6 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             transcriptionEngine: transcription,
             cleanupService: CleanupService(),
             textInserter: TextInserter(),
+            rescoringService: RescoringService(),
             activeAppProvider: ActiveAppProvider(),
             isRawMode: settings.isRawMode
         )
