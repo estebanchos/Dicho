@@ -14,19 +14,11 @@
 			remoteGlobalIDString = C41E705F2FDB3DD30005E429;
 			remoteInfo = Dicho;
 		};
-		C41E707A2FDB3DD50005E429 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = C41E70582FDB3DD30005E429 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = C41E705F2FDB3DD30005E429;
-			remoteInfo = Dicho;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		C41E70602FDB3DD30005E429 /* Dicho.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dicho.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C41E706F2FDB3DD50005E429 /* DichoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DichoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		C41E70792FDB3DD50005E429 /* DichoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DichoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C41E70902FDB3E870005E429 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -59,11 +51,6 @@
 			path = DichoTests;
 			sourceTree = "<group>";
 		};
-		C41E707C2FDB3DD50005E429 /* DichoUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = DichoUITests;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -81,13 +68,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		C41E70762FDB3DD50005E429 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -97,7 +77,6 @@
 				C4133D5D2FF6F737003D9976 /* Documentation */,
 				C41E70622FDB3DD30005E429 /* Dicho */,
 				C41E70722FDB3DD50005E429 /* DichoTests */,
-				C41E707C2FDB3DD50005E429 /* DichoUITests */,
 				C41E70612FDB3DD30005E429 /* Products */,
 				C41E70902FDB3E870005E429 /* CLAUDE.md */,
 			);
@@ -108,7 +87,6 @@
 			children = (
 				C41E70602FDB3DD30005E429 /* Dicho.app */,
 				C41E706F2FDB3DD50005E429 /* DichoTests.xctest */,
-				C41E70792FDB3DD50005E429 /* DichoUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -161,29 +139,6 @@
 			productReference = C41E706F2FDB3DD50005E429 /* DichoTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		C41E70782FDB3DD50005E429 /* DichoUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = C41E70892FDB3DD50005E429 /* Build configuration list for PBXNativeTarget "DichoUITests" */;
-			buildPhases = (
-				C41E70752FDB3DD50005E429 /* Sources */,
-				C41E70762FDB3DD50005E429 /* Frameworks */,
-				C41E70772FDB3DD50005E429 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				C41E707B2FDB3DD50005E429 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				C41E707C2FDB3DD50005E429 /* DichoUITests */,
-			);
-			name = DichoUITests;
-			packageProductDependencies = (
-			);
-			productName = DichoUITests;
-			productReference = C41E70792FDB3DD50005E429 /* DichoUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -198,10 +153,6 @@
 						CreatedOnToolsVersion = 26.5;
 					};
 					C41E706E2FDB3DD50005E429 = {
-						CreatedOnToolsVersion = 26.5;
-						TestTargetID = C41E705F2FDB3DD30005E429;
-					};
-					C41E70782FDB3DD50005E429 = {
 						CreatedOnToolsVersion = 26.5;
 						TestTargetID = C41E705F2FDB3DD30005E429;
 					};
@@ -223,7 +174,6 @@
 			targets = (
 				C41E705F2FDB3DD30005E429 /* Dicho */,
 				C41E706E2FDB3DD50005E429 /* DichoTests */,
-				C41E70782FDB3DD50005E429 /* DichoUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -237,13 +187,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C41E706D2FDB3DD50005E429 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		C41E70772FDB3DD50005E429 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -267,13 +210,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		C41E70752FDB3DD50005E429 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -281,11 +217,6 @@
 			isa = PBXTargetDependency;
 			target = C41E705F2FDB3DD30005E429 /* Dicho */;
 			targetProxy = C41E70702FDB3DD50005E429 /* PBXContainerItemProxy */;
-		};
-		C41E707B2FDB3DD50005E429 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = C41E705F2FDB3DD30005E429 /* Dicho */;
-			targetProxy = C41E707A2FDB3DD50005E429 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -536,46 +467,6 @@
 			};
 			name = Release;
 		};
-		C41E708A2FDB3DD50005E429 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = 6WGQ9965VP;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = swiftCO.DichoUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = Dicho;
-			};
-			name = Debug;
-		};
-		C41E708B2FDB3DD50005E429 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = 6WGQ9965VP;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = swiftCO.DichoUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = Dicho;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -602,15 +493,6 @@
 			buildConfigurations = (
 				C41E70872FDB3DD50005E429 /* Debug */,
 				C41E70882FDB3DD50005E429 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		C41E70892FDB3DD50005E429 /* Build configuration list for PBXNativeTarget "DichoUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				C41E708A2FDB3DD50005E429 /* Debug */,
-				C41E708B2FDB3DD50005E429 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
