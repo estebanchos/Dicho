@@ -1,0 +1,176 @@
+import Foundation
+import Testing
+@testable import Dicho
+
+/// `RescoringService` behavior with fakes (TASKS.md 10.4): gate-bounded model
+/// use, index-based selection, and total (never-throwing) fallback to the top
+/// hypothesis. No live FoundationModels calls.
+@Suite("RescoringService — gate + stateless selector (fakes, no live model)")
+@MainActor
+struct RescoringServiceTests {
+
+    /// A confident segment the gate must pass through untouched.
+    private func confident(_ text: String) -> TranscriptUpdate {
+        TranscriptUpdate(text: text, range: nil, isFinal: true, alternatives: [text], confidence: 0.99)
+    }
+
+    /// An ambiguous segment the gate must route to the selector.
+    private func ambiguous(_ text: String, alternatives: [String]) -> TranscriptUpdate {
+        TranscriptUpdate(text: text, range: nil, isFinal: true, alternatives: alternatives, confidence: 0.5)
+    }
+
+    private func makeService(
+        _ factory: FakeRescoringSessionFactory,
+        timeout: TimeInterval = 0.1
+    ) -> RescoringService {
+        RescoringService(segmentTimeout: timeout, isModelAvailable: { true }, makeSession: factory.make)
+    }
+
+    @Test("Confident segments reassemble without ever touching the model")
+    func passThroughNeverTouchesModel() async {
+        let factory = FakeRescoringSessionFactory([])
+        let service = makeService(factory)
+
+        let result = await service.rescore([confident(" she made me"), confident(" who I am today.")])
+
+        #expect(result == "she made me who I am today.")
+        #expect(factory.sessionsCreated == 0)
+    }
+
+    @Test("An ambiguous segment is replaced by the model-chosen candidate")
+    func ambiguousSegmentUsesChosenCandidate() async {
+        let session = FakeRescoringModelSession([.returnIndex(1)])
+        let factory = FakeRescoringSessionFactory([session])
+        let service = makeService(factory)
+
+        let result = await service.rescore([
+            confident(" I worked at the local"),
+            ambiguous(" daily", alternatives: [" daily", " deli"]),
+            confident(" making sandwiches."),
+        ])
+
+        #expect(result == "I worked at the local deli making sandwiches.")
+        #expect(factory.sessionsCreated == 1)
+    }
+
+    @Test("An out-of-range index falls back to the top hypothesis")
+    func outOfRangeIndexFallsBack() async {
+        let session = FakeRescoringModelSession([.returnIndex(7)])
+        let factory = FakeRescoringSessionFactory([session])
+        let service = makeService(factory)
+
+        let result = await service.rescore([ambiguous(" daily", alternatives: [" daily", " deli"])])
+
+        #expect(result == "daily")
+    }
+
+    @Test("A selector error falls back to the top hypothesis — rescore never throws")
+    func sessionErrorFallsBack() async {
+        let session = FakeRescoringModelSession([.throwError])
+        let factory = FakeRescoringSessionFactory([session])
+        let service = makeService(factory)
+
+        let result = await service.rescore([ambiguous(" daily", alternatives: [" daily", " deli"])])
+
+        #expect(result == "daily")
+    }
+
+    @Test("A selector timeout falls back to the top hypothesis")
+    func timeoutFallsBack() async {
+        let session = FakeRescoringModelSession([.sleepForever])
+        let factory = FakeRescoringSessionFactory([session])
+        let service = makeService(factory, timeout: 0.05)
+
+        let result = await service.rescore([ambiguous(" daily", alternatives: [" daily", " deli"])])
+
+        #expect(result == "daily")
+    }
+
+    @Test("The prewarmed session serves the first ambiguous segment; later ones get fresh sessions")
+    func prewarmedSessionConsumedFirst() async {
+        let first = FakeRescoringModelSession([.returnIndex(0)])
+        let second = FakeRescoringModelSession([.returnIndex(0)])
+        let factory = FakeRescoringSessionFactory([first, second])
+        let service = makeService(factory)
+
+        service.prewarm()
+        #expect(first.prewarmCount == 1)
+
+        _ = await service.rescore([
+            ambiguous(" daily", alternatives: [" daily", " deli"]),
+            ambiguous(" today.", alternatives: [" today.", " day."]),
+        ])
+
+        // One session from prewarm + one fresh for the second segment —
+        // selections are stateless, no session is reused across segments.
+        #expect(factory.sessionsCreated == 2)
+        #expect(first.prompts.count == 1)
+        #expect(second.prompts.count == 1)
+    }
+
+    @Test("The selector prompt numbers every candidate and includes the preceding context")
+    func promptCarriesCandidatesAndContext() async {
+        let session = FakeRescoringModelSession([.returnIndex(0)])
+        let factory = FakeRescoringSessionFactory([session])
+        let service = makeService(factory)
+
+        _ = await service.rescore([
+            confident(" I worked at the local"),
+            ambiguous(" daily", alternatives: [" daily", " deli"]),
+        ])
+
+        let prompt = session.prompts.first ?? ""
+        #expect(prompt.contains("0."))
+        #expect(prompt.contains("1."))
+        #expect(prompt.contains("daily"))
+        #expect(prompt.contains("deli"))
+        #expect(prompt.contains("I worked at the local"))
+    }
+
+    @Test("Model unavailable degrades to pure pass-through")
+    func modelUnavailablePassesThrough() async {
+        let factory = FakeRescoringSessionFactory([])
+        let service = RescoringService(
+            segmentTimeout: 0.1,
+            isModelAvailable: { false },
+            makeSession: factory.make
+        )
+
+        let result = await service.rescore([ambiguous(" daily", alternatives: [" daily", " deli"])])
+
+        #expect(result == "daily")
+        #expect(factory.sessionsCreated == 0)
+    }
+
+    @Test("Empty segment list produces an empty transcript")
+    func emptySegmentsProduceEmptyString() async {
+        let service = makeService(FakeRescoringSessionFactory([]))
+        let result = await service.rescore([])
+        #expect(result.isEmpty)
+    }
+}
+
+/// Golden-file checks for the selector prompt text (no live model).
+@Suite("RescoringService — selector prompt construction (golden-file)")
+@MainActor
+struct RescoringPromptTests {
+
+    @Test("Instructions direct index-only selection and forbid inventing text")
+    func instructionsAreSelectionOnly() {
+        let instructions = RescoringService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("index"))
+        #expect(instructions.localizedCaseInsensitiveContains("candidate"))
+        #expect(instructions.localizedCaseInsensitiveContains("never invent"))
+    }
+
+    @Test("buildPrompt numbers candidates from zero and embeds the context")
+    func promptEmbedsNumberedCandidates() {
+        let prompt = RescoringService.buildPrompt(
+            candidates: [" daily", " deli"],
+            context: "I worked at the local"
+        )
+        #expect(prompt.contains("0.  daily"))
+        #expect(prompt.contains("1.  deli"))
+        #expect(prompt.contains("I worked at the local"))
+    }
+}

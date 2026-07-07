@@ -42,4 +42,11 @@ enum Constants {
     /// clean speech scored 0.84–1.00 while the one genuinely ambiguous segment
     /// scored 0.76 — tuned against real dictation in the 10.6 manual A/B.
     static let rescoringConfidenceThreshold: Double = 0.85
+
+    /// Per-segment timeout for the rescoring selector (`RescoringService`).
+    /// Selection is a single small guided-generation turn (an index), so it
+    /// should complete well under this; on expiry the segment keeps the
+    /// transcriber's top hypothesis. Bounded so rescoring can never noticeably
+    /// delay insertion even with several ambiguous segments.
+    static let rescoringSegmentTimeout: TimeInterval = 2.0
 }
