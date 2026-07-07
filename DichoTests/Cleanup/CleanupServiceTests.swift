@@ -117,19 +117,20 @@ struct CleanupServiceTests {
         #expect(chunks.allSatisfy { $0.count <= charBudget })
     }
 
-    // MARK: - Target-app hint (7.3)
+    // MARK: - Target-app hint (7.3; all hints dropped in M9 round 4, 2026-07-05)
 
     @Test("hint(for: .generalWriting) returns nil so the prompt stays at baseline")
     func generalWritingProducesNoHint() {
         #expect(CleanupService.hint(for: .generalWriting) == nil)
     }
 
-    @Test("Every non-default category produces a non-empty hint")
-    func everyMeaningfulCategoryHasAHint() {
-        for category in AppCategory.allCases where category != .generalWriting {
-            let h = CleanupService.hint(for: category)
-            #expect(h != nil, "expected non-nil hint for \(category)")
-            #expect(h?.isEmpty == false)
+    @Test("Every category produces no hint — hints were dropped for prompt-size headroom")
+    func everyCategoryHasNoHint() {
+        // Developer decision 2026-07-05: measured improvement from the hints
+        // was insignificant, and instruction growth costs rule-following at
+        // this model size. Reintroduce a category hint only with A/B evidence.
+        for category in AppCategory.allCases {
+            #expect(CleanupService.hint(for: category) == nil, "expected nil hint for \(category)")
         }
     }
 
@@ -144,28 +145,17 @@ struct CleanupServiceTests {
         #expect(none == general)
     }
 
-    @Test(
-        "Category-specific instructions contain a distinguishing keyword from the hint",
-        arguments: [
-            (AppCategory.ide, "code editor"),
-            (.terminal, "terminal"),
-            (.messaging, "informal"),
-            (.email, "email"),
-            (.browser, "browser"),
-            (.notes, "notes"),
-            (.scriptWriting, "screenwriting"),
-            (.filmEditing, "video/film"),
-        ]
-    )
-    func categoryInstructionsContainKeyword(_ pair: (AppCategory, String)) {
-        let (category, keyword) = pair
-        let ctx = AppContext(bundleIdentifier: "x", localizedName: "x", category: category)
-        let instructions = CleanupService.buildInstructions(for: ctx)
-        #expect(instructions.localizedCaseInsensitiveContains(keyword))
+    @Test("Every category's instructions equal the baseline — no hint is appended")
+    func everyCategoryUsesBaselineInstructions() {
+        let baseline = CleanupService.buildInstructions()
+        for category in AppCategory.allCases {
+            let ctx = AppContext(bundleIdentifier: "x", localizedName: "x", category: category)
+            #expect(CleanupService.buildInstructions(for: ctx) == baseline, "expected baseline instructions for \(category)")
+        }
     }
 
-    @Test("Forbidden-actions block is preserved when a hint is appended")
-    func forbiddenActionsPreservedWithHint() {
+    @Test("Forbidden-actions block is present regardless of app context")
+    func forbiddenActionsPreservedWithContext() {
         let ide = AppContext(bundleIdentifier: "x", localizedName: "x", category: .ide)
         let instructions = CleanupService.buildInstructions(for: ide)
         // The same five forbidden keywords from the M5 contract must still be present.
@@ -183,45 +173,6 @@ struct CleanupServiceTests {
             instructions.localizedCaseInsensitiveContains("explanation") ||
             instructions.localizedCaseInsensitiveContains("preamble")
         )
-    }
-
-    @Test("Hint sits AFTER the FORBIDDEN block so it cannot override the contract")
-    func hintFollowsForbiddenBlock() {
-        let ide = AppContext(bundleIdentifier: "x", localizedName: "x", category: .ide)
-        let instructions = CleanupService.buildInstructions(for: ide)
-        guard
-            let forbiddenRange = instructions.range(of: "FORBIDDEN", options: .caseInsensitive),
-            let hintRange = instructions.range(of: "code editor", options: .caseInsensitive)
-        else {
-            Issue.record("Expected both FORBIDDEN and hint text in the instructions")
-            return
-        }
-        #expect(forbiddenRange.lowerBound < hintRange.lowerBound)
-    }
-
-    // MARK: - scriptWriting hint scoping (M7 post-verification fix, 2026-06-23)
-
-    @Test("scriptWriting hint scopes 'exactly as transcribed' to formatting tokens and preserves cleanup for dialogue/description")
-    func scriptWritingHintIsScopedCorrectly() {
-        guard let hint = CleanupService.hint(for: .scriptWriting) else {
-            Issue.record("scriptWriting hint must be non-nil")
-            return
-        }
-        // Formatting tokens must still be the things preserved.
-        #expect(hint.localizedCaseInsensitiveContains("scene"))
-        #expect(hint.localizedCaseInsensitiveContains("character"))
-        // The hint must explicitly clarify that dialogue/description still get
-        // the standard cleanup treatment, so the model does not read
-        // "exactly as transcribed" as a global override of self-correction
-        // (which is what happened during M7 Final Draft manual testing).
-        let mentionsDialogueOrDescription =
-            hint.localizedCaseInsensitiveContains("dialogue")
-            || hint.localizedCaseInsensitiveContains("description")
-        #expect(mentionsDialogueOrDescription)
-        let mentionsCleanupRules =
-            hint.localizedCaseInsensitiveContains("filler")
-            || hint.localizedCaseInsensitiveContains("self-correction")
-        #expect(mentionsCleanupRules)
     }
 
     // MARK: - Short-input bypass (M7 post-verification fix, 2026-06-23)
@@ -326,5 +277,375 @@ struct CleanupServiceTests {
         let instructions = CleanupService.buildInstructions()
         #expect(instructions.contains("no wait"))
         #expect(instructions.localizedCaseInsensitiveContains("Friday"))
+    }
+
+    // MARK: - Pause-repair + continuity rules (M9)
+
+    @Test("Instructions include the pause-repair rule with its worked example, before FORBIDDEN")
+    func instructionsIncludePauseRepairRule() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("pause"))
+        #expect(instructions.localizedCaseInsensitiveContains("mid-sentence"))
+        // The "went to the store" worked example is what the 3B model follows.
+        #expect(instructions.localizedCaseInsensitiveContains("went to the store"))
+
+        // The rule must sit BEFORE the FORBIDDEN block so it reads as ordinary
+        // cleanup guidance, not an override of the core contract.
+        guard
+            let pauseRange = instructions.range(of: "pause", options: .caseInsensitive),
+            let forbiddenRange = instructions.range(of: "FORBIDDEN")
+        else {
+            Issue.record("Expected both the pause rule and the FORBIDDEN block")
+            return
+        }
+        #expect(pauseRange.lowerBound < forbiddenRange.lowerBound)
+    }
+
+    @Test("Instructions include a cross-chunk consistency line")
+    func instructionsIncludeContinuityLine() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("consistent"))
+    }
+
+    @Test("Continuity rule prefers the most complete form over the earliest mention")
+    func continuityRulePrefersMostCompleteForm() {
+        // When ASR hears the same name two ways ("nicholas F" early,
+        // "nicholas ave" later), anchoring on the EARLIEST mention propagates
+        // the mis-hearing (M9 manual check 1). The rule must prefer the most
+        // complete/plausible form instead.
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("most complete"))
+        #expect(!instructions.localizedCaseInsensitiveContains("appear earlier"))
+    }
+
+    @Test("Pause-repair rule defers to self-correction so 'Tuesday — no wait, Friday' still resolves to Friday")
+    func pauseRepairDefersToSelfCorrection() {
+        let instructions = CleanupService.buildInstructions()
+        // The carve-out must state that pause repair does not override self-correction.
+        #expect(instructions.localizedCaseInsensitiveContains("never overrides the self-correction"))
+        // The em-dash self-correction example appears in both rules (self-correction +
+        // the pause-repair carve-out), so "no wait" is present more than once.
+        let noWaitOccurrences = instructions.components(separatedBy: "no wait").count - 1
+        #expect(noWaitOccurrences >= 2)
+        // And the carve-out spells out the wrong output it must avoid.
+        #expect(instructions.contains("never \"Tuesday, no wait, Friday\""))
+    }
+
+    // MARK: - Comma-form self-correction (M9 retest fix, 2026-07-02)
+
+    @Test("Self-correction shows the comma-form 'no wait' worked example")
+    func instructionsIncludeCommaFormNoWaitExample() {
+        // The transcriber emits commas, not em dashes, around correction markers.
+        // The worked example must match transcript-shaped input or the on-device
+        // model doesn't fire on it (M9 manual check 4: "correction" and
+        // "scratch that" — both shown with commas — worked; "no wait" didn't).
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("\"Tuesday, no wait, Friday\" → \"Friday\""))
+    }
+
+    @Test("Self-correction keeps the em-dash 'no wait' worked example alongside the comma form")
+    func instructionsKeepEmDashNoWaitExample() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("\"Tuesday — no wait, Friday\" → \"Friday\""))
+    }
+
+    @Test("Self-correction states that the marker's preceding punctuation never changes the rule")
+    func instructionsMakeMarkerPunctuationAgnostic() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("comma, period, or dash"))
+    }
+
+    // MARK: - Split-marker self-correction (M9 round 4, 2026-07-05)
+
+    @Test("Self-correction covers markers with punctuation inside them")
+    func instructionsCoverSplitMarkerForm() {
+        // The transcriber can render the marker as "No, wait" — comma inside,
+        // capitalized, starting a new sentence. The model punctuated that form
+        // instead of applying the correction (round-3 retest).
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("no, wait"))
+    }
+
+    @Test("Self-correction shows the sentence-initial split-marker worked example")
+    func instructionsIncludeSplitMarkerExample() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("the meeting is on Tuesday. No, wait on Thursday"))
+        #expect(instructions.contains("The meeting is on Thursday"))
+    }
+
+    @Test("Self-correction shows the fully unpunctuated raw-ASR worked example")
+    func instructionsIncludeUnpunctuatedMarkerExample() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("the meeting is on Tuesday no wait on Thursday"))
+    }
+
+    @Test("Self-correction rule sits at the top of the rule list, before filler removal")
+    func selfCorrectionRuleComesFirst() {
+        // Priority position: the on-device model weights early instructions
+        // more heavily, and self-correction is the rule that keeps regressing.
+        let instructions = CleanupService.buildInstructions()
+        guard
+            let correctionRange = instructions.range(of: "self-correction", options: .caseInsensitive),
+            let fillerRange = instructions.range(of: "filler", options: .caseInsensitive)
+        else {
+            Issue.record("Expected both the self-correction and filler rules")
+            return
+        }
+        #expect(correctionRange.lowerBound < fillerRange.lowerBound)
+    }
+
+    // MARK: - Contextual mis-transcription repair (M9 retest fix, 2026-07-05)
+
+    @Test("Instructions include the mis-transcription repair rule with all three conditions, before FORBIDDEN")
+    func instructionsIncludeMisTranscriptionRepairRule() {
+        // ESL/accented speech produces near-homophone ASR errors ("take the
+        // boss" for bus) that context makes unambiguous; the model needs
+        // explicit — and tightly bounded — permission to repair them.
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("sounds like"))
+        #expect(instructions.localizedCaseInsensitiveContains("nonsensical"))
+        #expect(instructions.localizedCaseInsensitiveContains("unambiguous"))
+
+        guard
+            let ruleRange = instructions.range(of: "sounds like", options: .caseInsensitive),
+            let forbiddenRange = instructions.range(of: "FORBIDDEN")
+        else {
+            Issue.record("Expected both the repair rule and the FORBIDDEN block")
+            return
+        }
+        #expect(ruleRange.lowerBound < forbiddenRange.lowerBound)
+    }
+
+    @Test("Mis-transcription repair shows both worked examples")
+    func misTranscriptionRepairHasWorkedExamples() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("take the boss to get to town"))
+        #expect(instructions.contains("take the bus to get to town"))
+        #expect(instructions.contains("hand over every time to my mother"))
+        #expect(instructions.contains("hand over every dime to my mother"))
+    }
+
+    @Test("Mis-transcription repair carries the uncertainty guard")
+    func misTranscriptionRepairHasUncertaintyGuard() {
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.localizedCaseInsensitiveContains("keep the transcribed word"))
+    }
+
+    @Test("FORBIDDEN block names the repair rule as its only exception")
+    func forbiddenBlockReferencesRepairException() {
+        // Without the cross-reference the two rules contradict and the 3B model
+        // resolves the conflict unpredictably.
+        let instructions = CleanupService.buildInstructions()
+        guard let forbiddenRange = instructions.range(of: "FORBIDDEN") else {
+            Issue.record("Expected the FORBIDDEN block")
+            return
+        }
+        let forbiddenBlock = instructions[forbiddenRange.lowerBound...]
+        #expect(forbiddenBlock.localizedCaseInsensitiveContains("mis-transcription repair"))
+    }
+}
+
+// MARK: - Session-lifecycle suite (M9, plan §A2)
+
+/// Error used to verify that unrecognized session errors propagate out of `clean`.
+private enum SessionTestError: Error, Equatable {
+    case boom
+}
+
+/// Marker prefix a scripted session prepends to signal "this chunk was cleaned",
+/// so tests can distinguish cleaned output from a raw-fallback chunk.
+private let cleanedMarkerPrefix = "CLEANED::"
+
+/// Builds a transcript of three ~1500-char sentences (~4500 chars total) that
+/// `splitIntoChunks` divides into exactly three chunks at the 2048-char budget.
+@MainActor
+private func makeThreeChunkInput() -> String {
+    (1...3).map { i in
+        String(repeating: "word\(i) ", count: 250).trimmingCharacters(in: .whitespaces) + "."
+    }.joined(separator: " ")
+}
+
+/// Scripted `.succeed` transform: strips the prompt boilerplate and returns the
+/// chunk prefixed with `cleanedMarkerPrefix`, so the join order and cleaned-vs-raw
+/// distinction are both observable in the final result.
+@MainActor
+private func markCleaned(_ prompt: String) -> String {
+    let promptPrefix = CleanupService.buildPrompt(for: "")
+    let chunk = prompt.hasPrefix(promptPrefix) ? String(prompt.dropFirst(promptPrefix.count)) : prompt
+    return cleanedMarkerPrefix + chunk
+}
+
+/// Counts how many chunks were marked cleaned in the joined result.
+private func cleanedCount(in result: String) -> Int {
+    result.components(separatedBy: cleanedMarkerPrefix).count - 1
+}
+
+@Suite("CleanupService — shared-session lifecycle (fakes, no live model)")
+@MainActor
+struct CleanupServiceSessionLifecycleTests {
+
+    @Test("A single shared session cleans all three chunks, joined in order")
+    func sharedSessionAcrossChunks() async throws {
+        let input = makeThreeChunkInput()
+        let chunks = CleanupService.splitIntoChunks(input)
+        #expect(chunks.count == 3)
+
+        let session = FakeCleanupModelSession([.succeed(markCleaned)])
+        let factory = FakeSessionFactory([session])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 1)
+        #expect(session.prompts.count == 3)
+        let expected = chunks.map { cleanedMarkerPrefix + $0 }.joined(separator: " ")
+        #expect(result == expected)
+    }
+
+    @Test("A prewarmed session is reused for all chunks — no extra session created")
+    func prewarmedSessionReused() async throws {
+        let input = makeThreeChunkInput()
+        let session = FakeCleanupModelSession([.succeed(markCleaned)])
+        let factory = FakeSessionFactory([session])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        service.prewarm()
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 1)
+        #expect(session.prewarmCount == 1)
+        #expect(session.prompts.count == 3)
+        #expect(cleanedCount(in: result) == 3)
+    }
+
+    @Test("An app context no longer discards the prewarmed session — hints are gone, so it is reused")
+    func appContextReusesPrewarmedSession() async throws {
+        // Inverse of the pre-round-4 behavior: with hints dropped (2026-07-05)
+        // every category's instructions equal the baseline, so the prewarmed
+        // session is never stale and no rebuild happens at record-stop.
+        let input = makeThreeChunkInput()
+        let prewarmed = FakeCleanupModelSession([.succeed(markCleaned)])
+        let factory = FakeSessionFactory([prewarmed])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        service.prewarm()
+        let email = AppContext(bundleIdentifier: "com.apple.mail", localizedName: "Mail", category: .email)
+        _ = try await service.clean(input, appContext: email)
+
+        #expect(factory.sessionsCreated == 1)
+        #expect(prewarmed.prewarmCount == 1)
+        #expect(prewarmed.prompts.count == 3)      // served all chunks
+        #expect(factory.instructionsUsed.last == CleanupService.buildInstructions())
+    }
+
+    @Test("Context-window overflow rotates the session and retries the chunk")
+    func overflowRotatesAndRetries() async throws {
+        let input = makeThreeChunkInput()
+        let session1 = FakeCleanupModelSession([.succeed(markCleaned), .throwOverflow])
+        let session2 = FakeCleanupModelSession([.succeed(markCleaned)])
+        let factory = FakeSessionFactory([session1, session2])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 2)
+        #expect(session1.prompts.count == 2)   // chunk1 ok, chunk2 overflow
+        #expect(session2.prompts.count == 2)   // chunk2 retry ok, chunk3 ok
+        #expect(cleanedCount(in: result) == 3) // all three cleaned end-to-end
+    }
+
+    @Test("When the overflow retry also overflows, that chunk is raw and later chunks stay on session 2")
+    func overflowRetryFailsFallsBackRaw() async throws {
+        let input = makeThreeChunkInput()
+        let chunks = CleanupService.splitIntoChunks(input)
+        let session1 = FakeCleanupModelSession([.succeed(markCleaned), .throwOverflow])
+        let session2 = FakeCleanupModelSession([.throwOverflow, .succeed(markCleaned)])
+        let factory = FakeSessionFactory([session1, session2])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 2)
+        #expect(session2.prompts.count == 2)     // chunk2 retry (overflow), chunk3 (ok)
+        #expect(cleanedCount(in: result) == 2)   // chunk1 & chunk3 cleaned; chunk2 raw
+        #expect(result.contains(chunks[1]))      // raw chunk2 present verbatim
+    }
+
+    @Test("A timed-out chunk is inserted raw and rotates in a fresh session for later chunks")
+    func timeoutInsertsRawAndRotates() async throws {
+        let input = makeThreeChunkInput()
+        let chunks = CleanupService.splitIntoChunks(input)
+        let session1 = FakeCleanupModelSession([.succeed(markCleaned), .sleepForever])
+        let session2 = FakeCleanupModelSession([.succeed(markCleaned)])
+        let factory = FakeSessionFactory([session1, session2])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 2)
+        #expect(session2.prompts.count == 1)     // only chunk3 (chunk2 timed out on session1)
+        #expect(cleanedCount(in: result) == 2)   // chunk1 & chunk3 cleaned; chunk2 raw
+        #expect(result.contains(chunks[1]))      // raw chunk2 present verbatim
+    }
+
+    @Test("Schema leakage inserts the chunk raw WITHOUT rotating the session")
+    func leakageInsertsRawKeepsSession() async throws {
+        let input = makeThreeChunkInput()
+        let chunks = CleanupService.splitIntoChunks(input)
+        let session = FakeCleanupModelSession([.succeed(markCleaned), .succeedWithLeakage, .succeed(markCleaned)])
+        let factory = FakeSessionFactory([session])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 1)    // NOT rotated — the session is still healthy
+        #expect(session.prompts.count == 3)      // all three chunks on the same session
+        #expect(cleanedCount(in: result) == 2)   // chunk1 & chunk3 cleaned; chunk2 raw
+        #expect(result.contains(chunks[1]))      // raw chunk2 present verbatim
+    }
+
+    @Test("A guardrail-refused chunk is inserted raw WITHOUT rotating the session or failing the call")
+    func guardrailInsertsRawKeepsSession() async throws {
+        let input = makeThreeChunkInput()
+        let chunks = CleanupService.splitIntoChunks(input)
+        let session = FakeCleanupModelSession([.succeed(markCleaned), .throwGuardrail, .succeed(markCleaned)])
+        let factory = FakeSessionFactory([session])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 1)    // NOT rotated — the session is still healthy
+        #expect(session.prompts.count == 3)      // all three chunks on the same session
+        #expect(cleanedCount(in: result) == 2)   // chunk1 & chunk3 cleaned; chunk2 raw
+        #expect(result.contains(chunks[1]))      // raw chunk2 present verbatim
+    }
+
+    @Test("A guardrail refusal during the overflow retry falls back to the raw chunk")
+    func guardrailDuringOverflowRetryFallsBackRaw() async throws {
+        let input = makeThreeChunkInput()
+        let chunks = CleanupService.splitIntoChunks(input)
+        let session1 = FakeCleanupModelSession([.succeed(markCleaned), .throwOverflow])
+        let session2 = FakeCleanupModelSession([.throwGuardrail, .succeed(markCleaned)])
+        let factory = FakeSessionFactory([session1, session2])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        let result = try await service.clean(input, appContext: nil)
+
+        #expect(factory.sessionsCreated == 2)
+        #expect(session2.prompts.count == 2)     // chunk2 retry (guardrail), chunk3 (ok)
+        #expect(cleanedCount(in: result) == 2)   // chunk1 & chunk3 cleaned; chunk2 raw
+        #expect(result.contains(chunks[1]))      // raw chunk2 present verbatim
+    }
+
+    @Test("An unrecognized (non-overflow, non-timeout) session error propagates out of clean")
+    func unrecognizedErrorPropagates() async {
+        let input = makeThreeChunkInput()
+        let session = FakeCleanupModelSession([.succeed(markCleaned), .throwOther(SessionTestError.boom)])
+        let factory = FakeSessionFactory([session])
+        let service = CleanupService(chunkTimeout: 0.1, isModelAvailable: { true }, makeSession: factory.make)
+
+        await #expect(throws: SessionTestError.self) {
+            _ = try await service.clean(input, appContext: nil)
+        }
     }
 }

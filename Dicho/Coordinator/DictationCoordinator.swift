@@ -113,9 +113,15 @@ final class DictationCoordinator {
     func handleTranscriptUpdate(_ update: TranscriptUpdate) {
         guard state == .recording || state == .transcribing else { return }
         if update.isFinal {
-            finalizedTranscript = finalizedTranscript.isEmpty
-                ? update.text
-                : finalizedTranscript + " " + update.text
+            // SpeechTranscriber final segments arrive with leading spaces; trim
+            // each segment before joining or the transcript accumulates double
+            // spaces at every segment boundary (raw mode and cleanup alike).
+            let segment = update.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !segment.isEmpty {
+                finalizedTranscript = finalizedTranscript.isEmpty
+                    ? segment
+                    : finalizedTranscript + " " + segment
+            }
             volatileText = ""
         } else if state == .recording {
             volatileText = update.text
@@ -241,9 +247,9 @@ final class DictationCoordinator {
 
         let textToInsert: String
         do {
-            textToInsert = try await withCleanupTimeout {
-                try await self.cleanupService.clean(transcript, appContext: appContext)
-            }
+            // CleanupService now owns the per-chunk timeout (and session rotation
+            // on timeout/overflow), so the coordinator calls clean() directly.
+            textToInsert = try await cleanupService.clean(transcript, appContext: appContext)
         } catch CleanupError.unavailable {
             textToInsert = transcript
             fireNotice(.cleanupUnavailable)
@@ -280,23 +286,6 @@ final class DictationCoordinator {
             try? await Task.sleep(for: .seconds(Constants.noticeDisplayDuration))
             guard !Task.isCancelled else { return }
             self?.activeNotice = nil
-        }
-    }
-
-    /// Races the cleanup operation against `Constants.cleanupChunkTimeout`.
-    /// Throws `CleanupError.timeout` if the timeout wins.
-    private func withCleanupTimeout<T: Sendable>(
-        _ operation: @escaping @Sendable () async throws -> T
-    ) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await Task.sleep(for: .seconds(Constants.cleanupChunkTimeout))
-                throw CleanupError.timeout
-            }
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
         }
     }
 }

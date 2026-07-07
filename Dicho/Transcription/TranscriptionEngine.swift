@@ -36,8 +36,17 @@ final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendabl
         print("[DEBUG] TranscriptionEngine using locale: \(locale.identifier)")
 #endif
 
-        // progressiveTranscription = volatileResults + fastResults — ideal for live dictation.
-        let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
+        // Explicit options instead of .progressiveTranscription: that preset bundles
+        // fastResults, which trades accuracy for latency ("faster but also less
+        // accurate results" — smaller context window, per Apple docs). Dictation
+        // inserts the FINAL transcript, so accuracy wins; volatileResults alone
+        // keeps the live HUD text. (OPTIMIZATIONS.md #4, folded into M9.)
+        let transcriber = SpeechTranscriber(
+            locale: locale,
+            transcriptionOptions: [],
+            reportingOptions: [.volatileResults],
+            attributeOptions: []
+        )
 
         // Ensure assets are installed; download if needed.
         if let request = try? await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {

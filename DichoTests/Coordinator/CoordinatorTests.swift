@@ -115,6 +115,33 @@ struct CoordinatorTests {
         #expect(cleanup.lastCleanedText == "hello world")
     }
 
+    @Test("Final segments with SpeechTranscriber-style leading spaces join with single separators")
+    func segmentLeadingSpacesNormalized() async {
+        let (coordinator, _, _, cleanup, _) = makeCoordinator()
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        // SpeechTranscriber final segments carry leading spaces; joining them
+        // with " " produced double spaces and a leading space (observed 2026-07-05).
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: " I was hoping you'd be dead.", range: nil, isFinal: true))
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: " The only reason why I came this way", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(cleanup.lastCleanedText == "I was hoping you'd be dead. The only reason why I came this way")
+    }
+
+    @Test("Whitespace-only final segments do not inject separators")
+    func whitespaceOnlySegmentsIgnored() async {
+        let (coordinator, _, _, cleanup, _) = makeCoordinator()
+
+        await coordinator.handleHotkeyEvent(.startRequested)
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "hello", range: nil, isFinal: true))
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "  ", range: nil, isFinal: true))
+        coordinator.handleTranscriptUpdate(TranscriptUpdate(text: "world", range: nil, isFinal: true))
+        await coordinator.handleHotkeyEvent(.stopRequested)
+
+        #expect(cleanup.lastCleanedText == "hello world")
+    }
+
     @Test("Volatile updates are not accumulated into the transcript")
     func volatileUpdatesNotAccumulated() async {
         let (coordinator, _, _, cleanup, _) = makeCoordinator()
