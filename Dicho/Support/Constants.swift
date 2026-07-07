@@ -38,10 +38,11 @@ enum Constants {
     /// Minimum-run-confidence threshold below which a finalized transcript
     /// segment becomes a rescoring candidate (see `RescoringGate`). Segments
     /// at or above the threshold always pass through as the transcriber's top
-    /// hypothesis. Initial value chosen from the M10 C0 spike (2026-07-06):
-    /// clean speech scored 0.84–1.00 while the one genuinely ambiguous segment
-    /// scored 0.76 — tuned against real dictation in the 10.6 manual A/B.
-    static let rescoringConfidenceThreshold: Double = 0.85
+    /// hypothesis. Initially 0.85 from the C0 spike; lowered to 0.70 after the
+    /// round-2 field test (2026-07-07): every firing in the 0.70–0.85 band
+    /// produced no change (or a selector miss), so the band cost latency for
+    /// zero quality — all real wins occurred below 0.70.
+    static let rescoringConfidenceThreshold: Double = 0.70
 
     /// Per-segment timeout for the rescoring selector (`RescoringService`).
     /// Selection is a single small guided-generation turn (an index), so it

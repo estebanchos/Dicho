@@ -62,15 +62,46 @@ final class RescoringService: RescoringServicing {
     }
 
     func rescore(_ segments: [TranscriptUpdate]) async -> String {
-        var assembled: [String] = []
+        // Per-segment context is precomputed from preceding TOP hypotheses —
+        // not from earlier chosen candidates — so selections are independent
+        // and can run concurrently. Selections rarely change words, so the
+        // context difference is negligible; the latency win is not (round-2
+        // field test: 12 serial selections dominated stop-to-insert time).
+        var contexts: [String] = []
+        var precedingText: [String] = []
         for segment in segments {
-            let chosen = await chooseText(for: segment, context: assembled.joined(separator: " "))
-            // Same trim-and-join rule the coordinator applied in M9: segments
-            // arrive with leading spaces; whitespace-only segments add nothing.
-            let trimmed = chosen.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { assembled.append(trimmed) }
+            contexts.append(precedingText.joined(separator: " "))
+            let trimmed = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { precedingText.append(trimmed) }
         }
-        return assembled.joined(separator: " ")
+
+        // Default every segment to its top hypothesis; overwrite with the
+        // model's choice for gate-flagged segments as selections complete.
+        var chosen = segments.map(\.text)
+        let modelAvailable = isModelAvailable()
+        await withTaskGroup(of: (Int, String).self) { group in
+            for (index, segment) in segments.enumerated()
+            where modelAvailable && RescoringGate.needsRescoring(segment, threshold: threshold) {
+#if DEBUG
+                print("[DEBUG] RescoringService: gate FIRED for '\(segment.text)' (confidence=\(segment.confidence.map { String(format: "%.2f", $0) } ?? "nil"), \(segment.alternatives.count) candidates)")
+#endif
+                let session = takeSession()
+                let context = contexts[index]
+                group.addTask { [segmentTimeout] in
+                    (index, await Self.select(segment, session: session, context: context, timeout: segmentTimeout))
+                }
+            }
+            for await (index, text) in group {
+                chosen[index] = text
+            }
+        }
+
+        // Same trim-and-join rule the coordinator applied in M9: segments
+        // arrive with leading spaces; whitespace-only segments add nothing.
+        return chosen
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 
     // MARK: - Internal — exposed for golden-file tests
@@ -109,23 +140,20 @@ final class RescoringService: RescoringServicing {
 
     // MARK: - Private
 
-    /// Chooses the text for one segment: gate → fresh session → index →
-    /// candidate; falls back to the top hypothesis on any failure.
-    private func chooseText(for segment: TranscriptUpdate, context: String) async -> String {
-        guard isModelAvailable(),
-              RescoringGate.needsRescoring(segment, threshold: threshold) else {
-            return segment.text
-        }
-#if DEBUG
-        print("[DEBUG] RescoringService: gate FIRED for '\(segment.text)' (confidence=\(segment.confidence.map { String(format: "%.2f", $0) } ?? "nil"), \(segment.alternatives.count) candidates)")
-#endif
-
-        let session = takeSession()
+    /// Runs one selection: prompt → index (raced against `timeout`) →
+    /// candidate, with the snap rule; falls back to the top hypothesis on any
+    /// failure. Static + parameter-passing so concurrent task-group children
+    /// share no mutable service state.
+    private static func select(
+        _ segment: TranscriptUpdate,
+        session: any RescoringModelSessioning,
+        context: String,
+        timeout: TimeInterval
+    ) async -> String {
         let prompt = Self.buildPrompt(
             candidates: segment.alternatives,
             context: String(context.suffix(Self.contextWindowMaxChars))
         )
-        let timeout = segmentTimeout
 
         do {
             let index = try await withThrowingTaskGroup(of: Int.self) { group in
@@ -141,6 +169,12 @@ final class RescoringService: RescoringServicing {
             guard segment.alternatives.indices.contains(index) else {
 #if DEBUG
                 print("[DEBUG] RescoringService: selector index \(index) out of range → top hypothesis kept")
+#endif
+                return segment.text
+            }
+            guard index != 0 else {
+#if DEBUG
+                print("[DEBUG] RescoringService: selector kept the top hypothesis (index 0)")
 #endif
                 return segment.text
             }

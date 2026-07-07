@@ -146,6 +146,51 @@ struct RescoringServiceTests {
         #expect(prompt.contains("I worked at the local"))
     }
 
+    @Test("Selection context is built from preceding top hypotheses, enabling concurrency")
+    func contextUsesTopHypotheses() async {
+        // Round 3 (2026-07-07): contexts are precomputed from segment top
+        // hypotheses — NOT from earlier chosen candidates — so selections can
+        // run concurrently. The first segment being replaced must not change
+        // the second segment's context.
+        let first = FakeRescoringModelSession([.returnIndex(1)])   // replaces " daily" → " deli"
+        let second = FakeRescoringModelSession([.returnIndex(0)])
+        let factory = FakeRescoringSessionFactory([first, second])
+        let service = makeService(factory)
+
+        _ = await service.rescore([
+            ambiguous(" daily", alternatives: [" daily", " deli"]),
+            confident(" making sandwiches, and"),
+            ambiguous(" I chip in", alternatives: [" I chip in", " I'd chip in"]),
+        ])
+
+        let prompt = second.prompts.first ?? ""
+        #expect(prompt.contains("daily"))            // top hypothesis, even though replaced
+        #expect(prompt.contains("making sandwiches"))
+        #expect(!prompt.contains("deli"))
+    }
+
+    @Test("Ambiguous segments are selected concurrently — two timeouts cost one timeout window")
+    func selectionsRunConcurrently() async {
+        // Two sleeping sessions with a 0.5 s timeout: serial execution would
+        // take ≥ 1.0 s; concurrent execution finishes in ~one timeout window.
+        let factory = FakeRescoringSessionFactory([
+            FakeRescoringModelSession([.sleepForever]),
+            FakeRescoringModelSession([.sleepForever]),
+        ])
+        let service = makeService(factory, timeout: 0.5)
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        let result = await service.rescore([
+            ambiguous(" daily", alternatives: [" daily", " deli"]),
+            ambiguous(" gonna", alternatives: [" gonna", " going"]),
+        ])
+        let elapsed = clock.now - start
+
+        #expect(result == "daily gonna")             // both fall back to top hypotheses
+        #expect(elapsed < .milliseconds(850), "selections appear to run serially: \(elapsed)")
+    }
+
     @Test("Model unavailable degrades to pure pass-through")
     func modelUnavailablePassesThrough() async {
         let factory = FakeRescoringSessionFactory([])
