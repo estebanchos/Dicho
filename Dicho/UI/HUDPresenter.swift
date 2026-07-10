@@ -38,7 +38,13 @@ final class HUDPresenter {
     private let panel: NSPanel
 
     init(coordinator: DictationCoordinator, settings: AppSettings) {
+        // Pin the SwiftUI root to a concrete panel-sized frame. The card centers
+        // via `.frame(maxWidth: .infinity)`, which only fills/centers when a
+        // definite width is proposed; NSHostingView(sizingOptions: []) proposes
+        // an unspecified width, so without this the card collapses to its
+        // content width and lands at the leading edge (M11 off-center bug).
         let hudView = HUDView(coordinator: coordinator, settings: settings)
+            .frame(width: Self.panelSize.width, height: Self.panelSize.height, alignment: .top)
         let hosting = NSHostingView(rootView: hudView)
         // No Auto Layout constraints — we manage the panel size statically.
         hosting.sizingOptions = []
