@@ -4,9 +4,10 @@ import Speech
 /// Production implementation of `TranscriptionEngineProtocol`.
 ///
 /// Uses `SpeechAnalyzer` + `SpeechTranscriber` (macOS 26, on-device).
-/// Couples to `AudioCapture` at the implementation level — before each session,
-/// `start()` asks `AudioCapture` for the session's `AnalyzerInput` stream and
-/// registers the correct audio format.
+/// Receives audio through the `AnalyzerAudioSource` seam (M12) — before each
+/// session, `start()` creates the session's `AnalyzerInput` stream and
+/// registers its continuation + the required audio format with the source
+/// (production: `AudioCapture`; eval harness: `FileAudioCapture`).
 ///
 /// Stream lifecycle: `start()` creates a fresh `updates` stream for each session;
 /// `stop()` finalizes the analyzer, waits for all results, then finishes the stream.
@@ -69,9 +70,9 @@ final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendabl
         print("[DEBUG] TranscriptionEngine: audio format = \(format)")
 #endif
 
-        // Give AudioCapture the new session continuation and the required format.
+        // Give the audio source the new session continuation and the required format.
         let (analyzerStream, analyzerContinuation) = AsyncStream<AnalyzerInput>.makeStream()
-        audioCapture.beginSession(continuation: analyzerContinuation, format: format)
+        audioSource.beginSession(continuation: analyzerContinuation, format: format)
 
         let analyzer = SpeechAnalyzer(modules: [transcriber])
         // Prewarm so the first result isn't delayed by lazy asset loading.
@@ -191,16 +192,17 @@ final class TranscriptionEngine: TranscriptionEngineProtocol, @unchecked Sendabl
     private var updateStream: AsyncStream<TranscriptUpdate>
     private var updateContinuation: AsyncStream<TranscriptUpdate>.Continuation?
 
-    // Held unowned — AudioCapture outlives any single session.
-    private unowned let audioCapture: AudioCapture
+    // Held unowned — the audio source outlives any single session (the app
+    // delegate / eval harness owns it for the pipeline's lifetime).
+    private unowned let audioSource: any AnalyzerAudioSource
 
     private var analyzer: SpeechAnalyzer?
     private var transcriber: SpeechTranscriber?
     private var analyzerTask: Task<Void, Never>?
     private var resultTask: Task<Void, Never>?
 
-    init(audioCapture: AudioCapture) {
-        self.audioCapture = audioCapture
+    init(audioSource: any AnalyzerAudioSource) {
+        self.audioSource = audioSource
         // Placeholder stream; replaced by a fresh one on each start() call.
         (updateStream, _) = AsyncStream.makeStream(of: TranscriptUpdate.self)
         updateContinuation = nil

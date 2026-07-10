@@ -10,7 +10,7 @@ import Speech
 /// - Note: `@unchecked Sendable` — all mutable state is guarded by `stateLock`
 ///   or accessed only from the audio engine's tap queue, which is always the
 ///   same serial background queue per engine instance.
-final class AudioCapture: AudioCapturing, @unchecked Sendable {
+final class AudioCapture: AudioCapturing, AnalyzerAudioSource, @unchecked Sendable {
 
     // MARK: - AudioCapturing
 
@@ -69,7 +69,7 @@ final class AudioCapture: AudioCapturing, @unchecked Sendable {
         analyzerContinuation = nil
     }
 
-    // MARK: - Internal (non-protocol) surface used by TranscriptionEngine
+    // MARK: - AnalyzerAudioSource (engine-facing seam, M12)
 
     /// Called by TranscriptionEngine before each session to register the new stream.
     func beginSession(continuation: AsyncStream<AnalyzerInput>.Continuation, format: AVAudioFormat) {
