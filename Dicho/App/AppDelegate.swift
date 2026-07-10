@@ -60,7 +60,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         guard let button = statusItem?.button else { return }
-        button.image = NSImage(systemSymbolName: "mic", accessibilityDescription: "Dicho")
+        // Dicho logo (shield + quotes) as a template image so the menu bar tints
+        // it for light/dark automatically. Sized to the standard menu-bar glyph.
+        let icon = NSImage(named: "MenuBarIcon")
+        icon?.isTemplate = true
+        icon?.size = NSSize(width: 18, height: 18)
+        button.image = icon
 
         let menu = NSMenu()
         menu.delegate = self
@@ -184,21 +189,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Observation
 
-    /// Recursively tracks `coordinator.state`, `settings.isRawMode`, and
-    /// `coordinator.activeNotice` so the status icon stays current and settings
-    /// changes propagate to the coordinator without coupling the two directly.
+    /// Recursively tracks `settings.isRawMode` and `coordinator.activeNotice` so
+    /// settings changes propagate to the coordinator and Accessibility revocation
+    /// reopens onboarding — without coupling the two directly. The status-item
+    /// icon is the static Dicho logo (recording state is shown by the HUD), so it
+    /// is no longer swapped here.
     private func scheduleObservation() {
         guard let coordinator else { return }
         withObservationTracking {
             // Keep coordinator's raw-mode flag in sync with settings.
             coordinator.isRawMode = settings.isRawMode
-
-            // Reflect recording state in the status-item icon.
-            let isRecording = coordinator.state == .recording
-            statusItem?.button?.image = NSImage(
-                systemSymbolName: isRecording ? "mic.fill" : "mic",
-                accessibilityDescription: "Dicho"
-            )
 
             // Open onboarding if the event tap signals Accessibility was revoked.
             if coordinator.activeNotice == .accessibilityPermissionMissing {
