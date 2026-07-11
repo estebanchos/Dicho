@@ -38,6 +38,16 @@
 			path = Documentation;
 			sourceTree = "<group>";
 		};
+		CAFE0001EA10000000000001 /* EvalFixtures */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = EvalFixtures;
+			sourceTree = "<group>";
+		};
+		CAFE0001EA10000000000002 /* EvalResults */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = EvalResults;
+			sourceTree = "<group>";
+		};
 		C41E70622FDB3DD30005E429 /* Dicho */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -77,6 +87,8 @@
 				C4133D5D2FF6F737003D9976 /* Documentation */,
 				C41E70622FDB3DD30005E429 /* Dicho */,
 				C41E70722FDB3DD50005E429 /* DichoTests */,
+				CAFE0001EA10000000000001 /* EvalFixtures */,
+				CAFE0001EA10000000000002 /* EvalResults */,
 				C41E70612FDB3DD30005E429 /* Products */,
 				C41E70902FDB3E870005E429 /* CLAUDE.md */,
 			);
