@@ -22,8 +22,11 @@ rules deterministically. Full context: `Documentation/eval_harness_plan.md`.
 3. **Run.** 3 repeats, tuning-tagged fixtures, both audio variants:
    ```
    TEST_RUNNER_DICHO_EVAL=1 xcodebuild test -scheme Dicho \
-     -destination 'platform=macOS' -only-testing:DichoTests/EvalRun
+     -destination 'platform=macOS' -parallel-testing-enabled NO \
+     -only-testing:DichoTests/EvalRun
    ```
+   (`-parallel-testing-enabled NO` is required — parallel runner clones
+   duplicate the run and poison latency via FM-daemon contention.)
 4. **Compare** against the current accepted baseline (`EvalCompare`).
    Accept iff ALL of:
    - no fixture gains a worst-run recoverable major vs baseline;

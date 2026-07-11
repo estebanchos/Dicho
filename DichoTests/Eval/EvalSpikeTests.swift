@@ -13,7 +13,8 @@ import Testing
 /// into the hosted runner (the app process), so the eval invocation is:
 ///
 ///     TEST_RUNNER_DICHO_EVAL=1 xcodebuild test -scheme Dicho \
-///         -destination 'platform=macOS' -only-testing:DichoTests/EvalSpikeTests
+///         -destination 'platform=macOS' -parallel-testing-enabled NO \
+///         -only-testing:DichoTests/EvalSpikeTests
 ///
 /// A plain gate run reports the suite as skipped. This trait mechanism is the
 /// convention amendment approved with the M12 spec (2026-07-10); see

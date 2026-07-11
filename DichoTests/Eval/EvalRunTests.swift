@@ -8,7 +8,13 @@ import Testing
 /// `EvalSpikeTests`). Invocation:
 ///
 ///     TEST_RUNNER_DICHO_EVAL=1 xcodebuild test -scheme Dicho \
-///         -destination 'platform=macOS' -only-testing:DichoTests/EvalRun
+///         -destination 'platform=macOS' -parallel-testing-enabled NO \
+///         -only-testing:DichoTests/EvalRun
+///
+/// `-parallel-testing-enabled NO` is REQUIRED: without it xcodebuild spawns
+/// two runner clones that execute the plan concurrently — duplicate reports
+/// and FM-daemon contention that poisons every latency number (observed on
+/// the 12.7 smoke run).
 ///
 /// Environment configuration (all forwarded via the TEST_RUNNER_ prefix):
 /// - DICHO_EVAL_FIXTURES  comma-separated fixture ids (default: all)
