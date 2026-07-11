@@ -149,24 +149,39 @@ enum EvalScorer {
     }
 
     /// Case-, punctuation-, and number-format-insensitive presence check.
+    /// A needle prefixed with "=" is surface-form-only: matched literally
+    /// (case-insensitive) with no normalization fallback — for assertions
+    /// ABOUT formatting, like requiring "first" to stay a word ("=1st" as
+    /// mustNotContain) or a genuine sentence period to survive ("=empty.").
     static func appears(_ needle: String, in text: String) -> Bool {
-        // Raw-text check first: word-boundary regex for single words,
-        // substring on collapsed whitespace for phrases.
-        let collapsedText = collapseWhitespace(text)
-        let collapsedNeedle = collapseWhitespace(needle)
-        if collapsedNeedle.contains(" ") {
-            if collapsedText.range(of: collapsedNeedle, options: [.caseInsensitive]) != nil { return true }
-        } else if !collapsedNeedle.isEmpty {
-            let escaped = NSRegularExpression.escapedPattern(for: collapsedNeedle)
-            if collapsedText.range(of: "\\b\(escaped)\\b", options: [.regularExpression, .caseInsensitive]) != nil {
-                return true
-            }
+        if needle.hasPrefix("=") {
+            return appearsRaw(String(needle.dropFirst()), in: text)
         }
+        if appearsRaw(needle, in: text) { return true }
         // Normalized-unit fallback (numbers, punctuation, casing).
         return EvalTokenizer.containsSubsequence(
             EvalTokenizer.normalizedSequence(text),
             EvalTokenizer.normalizedSequence(needle)
         )
+    }
+
+    /// Literal, case-insensitive presence: word-boundary matched when the
+    /// needle is one word bounded by alphanumerics (so "um" never fires on
+    /// "umbrella"); plain substring on collapsed whitespace otherwise
+    /// (word-boundary regexes misbehave when the needle starts/ends with
+    /// punctuation, e.g. "empty.").
+    private static func appearsRaw(_ needle: String, in text: String) -> Bool {
+        let collapsedText = collapseWhitespace(text)
+        let collapsedNeedle = collapseWhitespace(needle)
+        guard !collapsedNeedle.isEmpty else { return false }
+        let boundaryEligible = !collapsedNeedle.contains(" ")
+            && CharacterSet.alphanumerics.contains(collapsedNeedle.unicodeScalars.first!)
+            && CharacterSet.alphanumerics.contains(collapsedNeedle.unicodeScalars.last!)
+        if boundaryEligible {
+            let escaped = NSRegularExpression.escapedPattern(for: collapsedNeedle)
+            return collapsedText.range(of: "\\b\(escaped)\\b", options: [.regularExpression, .caseInsensitive]) != nil
+        }
+        return collapsedText.range(of: collapsedNeedle, options: [.caseInsensitive]) != nil
     }
 
     private static func collapseWhitespace(_ text: String) -> String {

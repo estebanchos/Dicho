@@ -208,6 +208,39 @@ struct EvalScoringTests {
         #expect(hit.contains { $0.kind == .assertionFailure })
     }
 
+    @Test("An = prefix makes a needle surface-form-only (no normalization)")
+    func rawPrefixDisablesNormalization() {
+        // "=1st" must fire only on the literal digit ordinal, never on "first".
+        let wordForm = EvalScorer.score(
+            expected: "the first year",
+            actual: "the first year",
+            mustNotContain: ["=1st"]
+        )
+        #expect(wordForm.isEmpty)
+
+        let digitForm = EvalScorer.score(
+            expected: "the first year",
+            actual: "the 1st year",
+            mustNotContain: ["=1st"]
+        )
+        #expect(digitForm.contains { $0.kind == .assertionFailure })
+
+        // "=empty." requires the literal period to survive.
+        let periodKept = EvalScorer.score(
+            expected: "It was empty. Everyone left.",
+            actual: "It was empty. Everyone left.",
+            mustContain: ["=empty."]
+        )
+        #expect(periodKept.isEmpty)
+
+        let periodLost = EvalScorer.score(
+            expected: "It was empty. Everyone left.",
+            actual: "It was empty, everyone left.",
+            mustContain: ["=empty."]
+        )
+        #expect(periodLost.contains { $0.kind == .assertionFailure })
+    }
+
     @Test("Assertions also match number-normalized forms")
     func assertionsMatchNormalizedNumbers() {
         // "seven percent" must be satisfied by "7%".
