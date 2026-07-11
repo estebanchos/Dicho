@@ -144,13 +144,30 @@ struct EvalRunReport: Codable {
     let results: [FixtureVariantResult]
     let skippedVariants: [String]
 
-    /// Drives accept/reject and targets — tuning-tagged fixtures only.
+    /// Variants that run and report in full but never gate accept/reject
+    /// (developer decision 2026-07-11, 12.8 baseline review): the developer's
+    /// real voice behaves like Samantha, while Paulina overstates the accent
+    /// penalty ~10x (105 vs 20 ceiling majors) — gating on it would tune
+    /// against synthetic noise. It stays in every run as the rescoring-gate
+    /// stress signal and an overfitting tripwire.
+    static let reportedOnlyVariants: Set<String> = ["tts:Paulina"]
+
+    /// Drives accept/reject and targets — tuning-tagged fixtures, minus the
+    /// reported-only variants.
     var tuningAggregate: RunAggregate {
-        RunAggregate(fixtures: results.filter(\.isTuning).map { $0.fixtureAggregate() })
+        RunAggregate(fixtures: results.filter(\.isGating).map { $0.fixtureAggregate() })
     }
-    /// Overfitting tripwire — reported, never gates.
+    /// Overfitting tripwire — reported, never gates (holdout-tagged fixtures
+    /// + reported-only variants).
     var holdoutAggregate: RunAggregate {
-        RunAggregate(fixtures: results.filter { !$0.isTuning }.map { $0.fixtureAggregate() })
+        RunAggregate(fixtures: results.filter { !$0.isGating }.map { $0.fixtureAggregate() })
+    }
+}
+
+extension FixtureVariantResult {
+    /// Whether this fixture-variant participates in the tuning gate.
+    var isGating: Bool {
+        isTuning && !EvalRunReport.reportedOnlyVariants.contains(variant)
     }
 }
 

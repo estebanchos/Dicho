@@ -5,7 +5,7 @@
   "expected": "The parse JSON function takes a data parameter and returns a dictionary. Set the timeout to thirty milliseconds and retry five times. The user ID column is the primary key.",
   "mustContain": ["JSON", "parameter", "primary key"],
   "mustNotContain": ["Jason"],
-  "tags": ["tuning"],
+  "tags": ["holdout"],
   "audio": {
     "recorded": "audio/recorded/tech-passthrough.m4a",
     "tts": [

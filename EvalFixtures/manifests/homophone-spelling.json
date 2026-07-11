@@ -5,7 +5,7 @@
   "expected": "The school principal explained the principle of compound interest. Their house is over there, and they're happy with it. Its engine lost its power, and it's making a strange noise.",
   "mustContain": ["principal explained", "principle of", "over there", "they're happy", "it's making"],
   "mustNotContain": [],
-  "tags": ["tuning"],
+  "tags": ["holdout"],
   "audio": {
     "recorded": "audio/recorded/homophone-spelling.m4a",
     "tts": [
