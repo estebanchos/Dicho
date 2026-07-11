@@ -1,0 +1,16 @@
+{
+  "id": "near-homophones-esl",
+  "phenomenon": "accent-driven near-homophone ASR errors (the M9/M10 historical set); real signal comes from the recorded variant",
+  "spoken": "Every morning I take the bus to work and grab a sandwich at the deli next door. My grandmother raised three kids and a mother could not have done more. She taught me who I am today. She would pawn her jewelry to keep us fed, and she saved every dime she ever earned.",
+  "expected": "Every morning I take the bus to work and grab a sandwich at the deli next door. My grandmother raised three kids and a mother could not have done more. She taught me who I am today. She would pawn her jewelry to keep us fed, and she saved every dime she ever earned.",
+  "mustContain": ["bus", "deli", "and a mother", "who I am", "pawn", "dime"],
+  "mustNotContain": ["boss", "daily", "Anna"],
+  "tags": ["tuning"],
+  "audio": {
+    "recorded": "audio/recorded/near-homophones-esl.m4a",
+    "tts": [
+      { "voice": "Samantha", "file": "audio/tts/near-homophones-esl-samantha.aiff" },
+      { "voice": "Paulina", "file": "audio/tts/near-homophones-esl-paulina.aiff" }
+    ]
+  }
+}

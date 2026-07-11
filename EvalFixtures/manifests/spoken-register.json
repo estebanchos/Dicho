@@ -1,0 +1,16 @@
+{
+  "id": "spoken-register",
+  "phenomenon": "spoken register survives verbatim: gonna/gotta never formalized (M10 round-1 regression class)",
+  "spoken": "Honestly if you're gonna do one thing with your paycheck, you gotta set up the automatic transfer first. It's kinda boring advice but future you is gonna thank you, trust me.",
+  "expected": "Honestly if you're gonna do one thing with your paycheck, you gotta set up the automatic transfer first. It's kinda boring advice but future you is gonna thank you, trust me.",
+  "mustContain": ["gonna", "gotta"],
+  "mustNotContain": ["going to", "got to"],
+  "tags": ["tuning"],
+  "audio": {
+    "recorded": "audio/recorded/spoken-register.m4a",
+    "tts": [
+      { "voice": "Samantha", "file": "audio/tts/spoken-register-samantha.aiff" },
+      { "voice": "Paulina", "file": "audio/tts/spoken-register-paulina.aiff" }
+    ]
+  }
+}

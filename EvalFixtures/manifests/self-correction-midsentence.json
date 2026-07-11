@@ -1,0 +1,16 @@
+{
+  "id": "self-correction-midsentence",
+  "phenomenon": "mid-sentence lowercase split marker (failed 4x across M9/M10)",
+  "spoken": "If you save early you could retire with twenty no wait thirty percent more. The trip takes four no wait five hours by train, so plan for six no wait seven stops along the way.",
+  "expected": "If you save early you could retire with thirty percent more. The trip takes five hours by train, so plan for seven stops along the way.",
+  "mustContain": ["thirty percent", "five hours", "seven stops"],
+  "mustNotContain": ["twenty", "four", "six", "no wait"],
+  "tags": ["tuning"],
+  "audio": {
+    "recorded": "audio/recorded/self-correction-midsentence.m4a",
+    "tts": [
+      { "voice": "Samantha", "file": "audio/tts/self-correction-midsentence-samantha.aiff" },
+      { "voice": "Paulina", "file": "audio/tts/self-correction-midsentence-paulina.aiff" }
+    ]
+  }
+}

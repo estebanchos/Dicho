@@ -1,0 +1,16 @@
+{
+  "id": "numbers-ordinals",
+  "phenomenon": "number and ordinal stability: spoken forms must not churn (first -> 1st is the OPTIMIZATIONS #12 regression)",
+  "spoken": "You put in a thousand dollars at seven percent, so the first year you earn seventy bucks and end up with one thousand seventy. By the tenth year it compounds hard. We moved here on March third.",
+  "expected": "You put in a thousand dollars at seven percent, so the first year you earn seventy bucks and end up with one thousand seventy. By the tenth year it compounds hard. We moved here on March third.",
+  "mustContain": ["seven percent", "seventy"],
+  "mustNotContain": ["=1st", "=3rd"],
+  "tags": ["tuning"],
+  "audio": {
+    "recorded": "audio/recorded/numbers-ordinals.m4a",
+    "tts": [
+      { "voice": "Samantha", "file": "audio/tts/numbers-ordinals-samantha.aiff" },
+      { "voice": "Paulina", "file": "audio/tts/numbers-ordinals-paulina.aiff" }
+    ]
+  }
+}

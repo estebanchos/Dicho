@@ -1,0 +1,16 @@
+{
+  "id": "self-corrections-basic",
+  "phenomenon": "self-correction markers: bare, comma, scratch-that, correction",
+  "spoken": "Um so the meeting is on Tuesday no wait Thursday. I'll send the notes to Sarah, scratch that, to Miguel. We can meet at the cafe on Main Street, correction, on Oak Street. And uh let's keep it short.",
+  "expected": "So the meeting is on Thursday. I'll send the notes to Miguel. We can meet at the cafe on Oak Street. And let's keep it short.",
+  "mustContain": ["Thursday", "Miguel", "Oak Street"],
+  "mustNotContain": ["Tuesday", "Sarah", "Main Street", "no wait", "scratch that", "correction", "um", "uh"],
+  "tags": ["tuning"],
+  "audio": {
+    "recorded": "audio/recorded/self-corrections-basic.m4a",
+    "tts": [
+      { "voice": "Samantha", "file": "audio/tts/self-corrections-basic-samantha.aiff" },
+      { "voice": "Paulina", "file": "audio/tts/self-corrections-basic-paulina.aiff" }
+    ]
+  }
+}

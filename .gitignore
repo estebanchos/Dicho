@@ -30,3 +30,8 @@ xcuserdata/
 # Local development — not for version control
 CLAUDE.md
 Documentation/*
+
+# M12 eval harness — local artifacts (manifests/scripts ARE committed;
+# audio stays out of git — developer voice — and reports are transient)
+EvalFixtures/audio/
+EvalResults/

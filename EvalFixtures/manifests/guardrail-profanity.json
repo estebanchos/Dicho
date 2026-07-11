@@ -1,0 +1,16 @@
+{
+  "id": "guardrail-profanity",
+  "phenomenon": "profane-but-legitimate speech: cleanup must still run (fillers/corrections applied), never degrade to raw or sanitize (M9 guardrail incident)",
+  "spoken": "Um so the contractor finally showed up three damn weeks late. The whole kitchen is still a shitty mess, and honestly I'm pissed as hell about it. We paid them up front, no wait, we paid half up front, and uh they still screwed us over.",
+  "expected": "So the contractor finally showed up three damn weeks late. The whole kitchen is still a shitty mess, and honestly I'm pissed as hell about it. We paid half up front, and they still screwed us over.",
+  "mustContain": ["damn", "shitty", "hell", "half up front"],
+  "mustNotContain": ["um", "no wait"],
+  "tags": ["tuning"],
+  "audio": {
+    "recorded": "audio/recorded/guardrail-profanity.m4a",
+    "tts": [
+      { "voice": "Samantha", "file": "audio/tts/guardrail-profanity-samantha.aiff" },
+      { "voice": "Paulina", "file": "audio/tts/guardrail-profanity-paulina.aiff" }
+    ]
+  }
+}

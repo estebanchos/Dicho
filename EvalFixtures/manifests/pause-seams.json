@@ -1,0 +1,16 @@
+{
+  "id": "pause-seams",
+  "phenomenon": "mid-sentence pause must not become a period; genuine sentence ends must survive",
+  "spoken": "I started writing the report this morning [pause:2] and finished it after lunch. The building was empty. [pause:2] Everyone had gone home early. We packed our bags [pause:2] and drove to the coast before sunrise.",
+  "expected": "I started writing the report this morning, and finished it after lunch. The building was empty. Everyone had gone home early. We packed our bags, and drove to the coast before sunrise.",
+  "mustContain": ["=empty. Everyone"],
+  "mustNotContain": ["=morning.", "=bags."],
+  "tags": ["tuning"],
+  "audio": {
+    "recorded": "audio/recorded/pause-seams.m4a",
+    "tts": [
+      { "voice": "Samantha", "file": "audio/tts/pause-seams-samantha.aiff" },
+      { "voice": "Paulina", "file": "audio/tts/pause-seams-paulina.aiff" }
+    ]
+  }
+}
