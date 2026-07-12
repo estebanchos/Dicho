@@ -455,7 +455,7 @@ struct CleanupServiceTests {
         #expect(instructions.localizedCaseInsensitiveContains("keep the transcribed word"))
     }
 
-    @Test("FORBIDDEN block names the repair rule as its only exception")
+    @Test("FORBIDDEN block names the repair rule among its exceptions")
     func forbiddenBlockReferencesRepairException() {
         // Without the cross-reference the two rules contradict and the 3B model
         // resolves the conflict unpredictably.
@@ -466,6 +466,22 @@ struct CleanupServiceTests {
         }
         let forbiddenBlock = instructions[forbiddenRange.lowerBound...]
         #expect(forbiddenBlock.localizedCaseInsensitiveContains("mis-transcription repair"))
+    }
+
+    @Test("FORBIDDEN block licenses self-correction to drop abandoned numbers")
+    func forbiddenBlockReferencesSelfCorrectionException() {
+        // The no-numbers-altered clause must name self-correction as an
+        // exception, or it literally denies the self-correction rule the right
+        // to drop an abandoned number ("20, no wait 30") — the exact residual
+        // class stuck across iterations 1–4.
+        let instructions = CleanupService.buildInstructions()
+        guard let forbiddenRange = instructions.range(of: "FORBIDDEN") else {
+            Issue.record("Expected the FORBIDDEN block")
+            return
+        }
+        let forbiddenBlock = instructions[forbiddenRange.lowerBound...]
+        #expect(forbiddenBlock.localizedCaseInsensitiveContains("self-correction"))
+        #expect(forbiddenBlock.localizedCaseInsensitiveContains("abandoned number"))
     }
 }
 

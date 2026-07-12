@@ -168,7 +168,9 @@ final class CleanupService: CleanupServicing {
 
         FORBIDDEN: Do NOT paraphrase, summarize, translate, change register or tone, \
         or alter any identifiers, numbers, URLs, code, or technical terms — the \
-        mis-transcription repair rule above is the only exception. \
+        self-correction and mis-transcription repair rules above are the only \
+        exceptions (dropping an abandoned number during a self-correction is \
+        required). \
         Output ONLY the cleaned text with no commentary, preamble, or explanation.
         """
         guard let hint = appContext.flatMap({ Self.hint(for: $0.category) }) else {
