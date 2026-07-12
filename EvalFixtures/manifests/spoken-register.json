@@ -8,6 +8,9 @@
   "tags": ["tuning"],
   "audio": {
     "recorded": "audio/recorded/spoken-register.m4a",
+    "additionalRecorded": [
+      { "name": "maria", "file": "audio/recorded-maria/spoken-register.m4a" }
+    ],
     "tts": [
       { "voice": "Samantha", "file": "audio/tts/spoken-register-samantha.aiff" },
       { "voice": "Paulina", "file": "audio/tts/spoken-register-paulina.aiff" }

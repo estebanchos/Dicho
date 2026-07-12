@@ -8,6 +8,9 @@
   "tags": ["holdout"],
   "audio": {
     "recorded": "audio/recorded/homophone-spelling.m4a",
+    "additionalRecorded": [
+      { "name": "maria", "file": "audio/recorded-maria/homophone-spelling.m4a" }
+    ],
     "tts": [
       { "voice": "Samantha", "file": "audio/tts/homophone-spelling-samantha.aiff" },
       { "voice": "Paulina", "file": "audio/tts/homophone-spelling-paulina.aiff" }

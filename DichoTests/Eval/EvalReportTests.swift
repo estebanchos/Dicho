@@ -19,13 +19,13 @@ struct EvalReportTests {
 
     @Test("Gate = tuning-tagged fixtures minus reported-only variants")
     func gatingRule() {
+        // 2026-07-12 instrument: developer's voice is the sole gating variant.
         #expect(result("a", variant: "recorded", tags: ["tuning"]).isGating)
-        #expect(result("a", variant: "tts:Samantha", tags: ["tuning"]).isGating)
-        // Reported-only variant never gates, even on a tuning fixture.
-        #expect(!result("a", variant: "tts:Paulina", tags: ["tuning"]).isGating)
+        // The Maria canary never gates, even on a tuning fixture.
+        #expect(!result("a", variant: "recorded:maria", tags: ["tuning"]).isGating)
         // Holdout-tagged fixtures never gate on any variant.
         #expect(!result("h", variant: "recorded", tags: ["holdout"]).isGating)
-        #expect(!result("h", variant: "tts:Samantha", tags: ["holdout"]).isGating)
+        #expect(!result("h", variant: "recorded:maria", tags: ["holdout"]).isGating)
     }
 
     @Test("Aggregates split along the gating rule")
@@ -39,16 +39,16 @@ struct EvalReportTests {
             ),
             results: [
                 result("a", variant: "recorded", tags: ["tuning"]),
-                result("a", variant: "tts:Paulina", tags: ["tuning"]),
+                result("a", variant: "recorded:maria", tags: ["tuning"]),
                 result("h", variant: "recorded", tags: ["holdout"]),
             ],
             skippedVariants: []
         )
         #expect(report.tuningAggregate.fixtures.map(\.fixtureID) == ["a@recorded"])
-        #expect(Set(report.holdoutAggregate.fixtures.map(\.fixtureID)) == ["a@tts:Paulina", "h@recorded"])
+        #expect(Set(report.holdoutAggregate.fixtures.map(\.fixtureID)) == ["a@recorded:maria", "h@recorded"])
     }
 
-    @Test("Current fixture set gates 18 variants: 9 tuning fixtures x recorded+Samantha")
+    @Test("Current fixture set gates 9 variants: 9 tuning fixtures x recorded only")
     func currentFixtureSetGatingCount() throws {
         let manifests = try EvalPaths.loadManifests()
         let tuning = manifests.filter(\.isTuning)

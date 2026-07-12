@@ -8,6 +8,9 @@
   "tags": ["tuning"],
   "audio": {
     "recorded": "audio/recorded/numbers-ordinals.m4a",
+    "additionalRecorded": [
+      { "name": "maria", "file": "audio/recorded-maria/numbers-ordinals.m4a" }
+    ],
     "tts": [
       { "voice": "Samantha", "file": "audio/tts/numbers-ordinals-samantha.aiff" },
       { "voice": "Paulina", "file": "audio/tts/numbers-ordinals-paulina.aiff" }

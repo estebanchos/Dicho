@@ -9,6 +9,9 @@
   "tags": ["tuning"],
   "audio": {
     "recorded": "audio/recorded/long-multiphenomenon.m4a",
+    "additionalRecorded": [
+      { "name": "maria", "file": "audio/recorded-maria/long-multiphenomenon.m4a" }
+    ],
     "tts": [
       { "voice": "Samantha", "file": "audio/tts/long-multiphenomenon-samantha.aiff" },
       { "voice": "Paulina", "file": "audio/tts/long-multiphenomenon-paulina.aiff" }

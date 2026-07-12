@@ -18,6 +18,11 @@ struct EvalManifestTests {
             #expect(!manifest.expected.isEmpty)
             #expect(!manifest.audio.tts.isEmpty)
             #expect(!manifest.tags.isEmpty)
+            // Maria canary (2026-07-12): every fixture carries exactly one
+            // additional recorded speaker pointing into recorded-maria/.
+            let additional = manifest.audio.additionalRecorded ?? []
+            #expect(additional.map(\.name) == ["maria"])
+            #expect(additional.first?.file == "audio/recorded-maria/\(manifest.id).m4a")
         }
         // Exactly one long-form fixture in the initial set.
         #expect(manifests.count(where: \.isLong) == 1)
@@ -41,6 +46,17 @@ struct EvalManifestTests {
         #expect(throws: (any Error).self) {
             _ = try JSONDecoder().decode(EvalManifest.self, from: malformed)
         }
+    }
+
+    @Test("additionalRecorded is optional — a manifest without it decodes with nil")
+    func additionalRecordedIsOptional() throws {
+        let legacy = Data("""
+        { "id": "x", "phenomenon": "p", "spoken": "s", "expected": "e",
+          "mustContain": [], "mustNotContain": [], "tags": ["tuning"],
+          "audio": { "recorded": "audio/recorded/x.m4a", "tts": [] } }
+        """.utf8)
+        let manifest = try JSONDecoder().decode(EvalManifest.self, from: legacy)
+        #expect(manifest.audio.additionalRecorded == nil)
     }
 
     @Test("Round-trip encode/decode preserves the manifest")

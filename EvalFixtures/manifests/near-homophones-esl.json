@@ -8,6 +8,9 @@
   "tags": ["tuning"],
   "audio": {
     "recorded": "audio/recorded/near-homophones-esl.m4a",
+    "additionalRecorded": [
+      { "name": "maria", "file": "audio/recorded-maria/near-homophones-esl.m4a" }
+    ],
     "tts": [
       { "voice": "Samantha", "file": "audio/tts/near-homophones-esl-samantha.aiff" },
       { "voice": "Paulina", "file": "audio/tts/near-homophones-esl-paulina.aiff" }

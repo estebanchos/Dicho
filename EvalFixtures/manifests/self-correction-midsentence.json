@@ -8,6 +8,9 @@
   "tags": ["tuning"],
   "audio": {
     "recorded": "audio/recorded/self-correction-midsentence.m4a",
+    "additionalRecorded": [
+      { "name": "maria", "file": "audio/recorded-maria/self-correction-midsentence.m4a" }
+    ],
     "tts": [
       { "voice": "Samantha", "file": "audio/tts/self-correction-midsentence-samantha.aiff" },
       { "voice": "Paulina", "file": "audio/tts/self-correction-midsentence-paulina.aiff" }

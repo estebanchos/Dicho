@@ -19,8 +19,13 @@ import Testing
 /// Environment configuration (all forwarded via the TEST_RUNNER_ prefix):
 /// - DICHO_EVAL_FIXTURES  comma-separated fixture ids (default: all)
 /// - DICHO_EVAL_REPEATS   repeats per fixture-variant (default: 3)
-/// - DICHO_EVAL_AUDIO     recorded | tts | both (default: both)
 /// - DICHO_EVAL_LABEL     run-directory suffix (default: "run")
+///
+/// DICHO_EVAL_AUDIO was removed 2026-07-12 (developer decision): TTS variants
+/// are retired from enumeration — the runner plays only human recordings, the
+/// developer's voice ("recorded") plus additionalRecorded speakers
+/// ("recorded:<name>"). The manifests' tts blocks and generate_tts.sh stay
+/// dormant on disk.
 ///
 /// Each repeat assembles a FRESH pipeline graph (fresh FM sessions, fresh
 /// analyzer) and drives the real `DictationCoordinator` exactly like a user:
@@ -40,7 +45,6 @@ struct EvalRun {
             $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         }
         let repeats = environment["DICHO_EVAL_REPEATS"].flatMap(Int.init) ?? 3
-        let audioMode = environment["DICHO_EVAL_AUDIO"] ?? "both"
         let label = environment["DICHO_EVAL_LABEL"] ?? "run"
 
         let manifests = try EvalPaths.loadManifests(ids: ids)
@@ -50,7 +54,7 @@ struct EvalRun {
         var skipped: [String] = []
 
         for manifest in manifests {
-            for (variantName, relativePath) in Self.variants(of: manifest, mode: audioMode) {
+            for (variantName, relativePath) in Self.variants(of: manifest) {
                 let audioURL = EvalPaths.audioURL(relativePath)
                 guard FileManager.default.fileExists(atPath: audioURL.path) else {
                     skipped.append("\(manifest.id)@\(variantName)")
@@ -85,9 +89,9 @@ struct EvalRun {
             }
         }
 
-        try #require(!results.isEmpty, "no fixture variant had audio — run generate_tts.sh or record first")
+        try #require(!results.isEmpty, "no fixture variant had audio — record fixtures first (RECORDING.md)")
 
-        let fingerprint = ConfigFingerprint.capture(label: label, repeats: repeats, audioMode: audioMode)
+        let fingerprint = ConfigFingerprint.capture(label: label, repeats: repeats, audioMode: "recorded")
         let report = EvalRunReport(fingerprint: fingerprint, results: results, skippedVariants: skipped)
         let verdictSection = Self.verdictSection(for: report)
         let directory = try EvalReportWriter.write(report, verdictSection: verdictSection)
@@ -207,14 +211,16 @@ struct EvalRun {
 
     // MARK: - Variants + verdict
 
-    private static func variants(of manifest: EvalManifest, mode: String) -> [(name: String, path: String)] {
+    /// Human recordings only (TTS retired 2026-07-12): the developer's voice
+    /// ("recorded", the sole gating variant) plus each additionalRecorded
+    /// speaker as "recorded:<name>" (reported-only canaries; see
+    /// `EvalRunReport.reportedOnlyVariants`).
+    private static func variants(of manifest: EvalManifest) -> [(name: String, path: String)] {
         var list: [(String, String)] = []
-        if mode != "tts", let recorded = manifest.audio.recorded {
+        if let recorded = manifest.audio.recorded {
             list.append(("recorded", recorded))
         }
-        if mode != "recorded" {
-            list += manifest.audio.tts.map { ("tts:\($0.voice)", $0.file) }
-        }
+        list += (manifest.audio.additionalRecorded ?? []).map { ("recorded:\($0.name)", $0.file) }
         return list
     }
 

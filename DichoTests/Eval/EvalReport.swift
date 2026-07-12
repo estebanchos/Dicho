@@ -144,13 +144,17 @@ struct EvalRunReport: Codable {
     let results: [FixtureVariantResult]
     let skippedVariants: [String]
 
-    /// Variants that run and report in full but never gate accept/reject
-    /// (developer decision 2026-07-11, 12.8 baseline review): the developer's
-    /// real voice behaves like Samantha, while Paulina overstates the accent
-    /// penalty ~10x (105 vs 20 ceiling majors) — gating on it would tune
-    /// against synthetic noise. It stays in every run as the rescoring-gate
-    /// stress signal and an overfitting tripwire.
-    static let reportedOnlyVariants: Set<String> = ["tts:Paulina"]
+    /// Variants that run and report in full but never gate accept/reject.
+    /// 2026-07-12 (developer decision, supersedes the 12.8 tts:Paulina entry):
+    /// TTS variants are retired from enumeration entirely — Samantha's
+    /// synthetic shapes produced stuck rows that couldn't gate meaningfully,
+    /// and Paulina overstated the accent penalty ~10x. A real-human canary
+    /// replaces them: "recorded:maria" (softer-accent ESL speaker) reports
+    /// every run but never gates; promotion to gating is a developer review
+    /// after ~2 more iterations (criteria: her rows move with recorded's, no
+    /// divergent stuck classes, no one-take-artifact-dominated rows). The
+    /// developer's own voice ("recorded") is the sole gating variant.
+    static let reportedOnlyVariants: Set<String> = ["recorded:maria"]
 
     /// Drives accept/reject and targets — tuning-tagged fixtures, minus the
     /// reported-only variants.

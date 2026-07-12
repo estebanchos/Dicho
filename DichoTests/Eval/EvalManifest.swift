@@ -9,9 +9,18 @@ struct EvalManifest: Codable, Equatable {
         let file: String
     }
 
+    /// A second human speaker's recording of the same script
+    /// (e.g. `audio/recorded-maria/<id>.m4a`).
+    struct AdditionalRecorded: Codable, Equatable {
+        let name: String
+        let file: String
+    }
+
     struct Audio: Codable, Equatable {
         let recorded: String?
         let tts: [TTSVariant]
+        /// Optional — absent in a manifest decodes as nil (older schema).
+        let additionalRecorded: [AdditionalRecorded]?
     }
 
     let id: String

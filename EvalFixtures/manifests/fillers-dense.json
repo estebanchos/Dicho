@@ -8,6 +8,9 @@
   "tags": ["tuning"],
   "audio": {
     "recorded": "audio/recorded/fillers-dense.m4a",
+    "additionalRecorded": [
+      { "name": "maria", "file": "audio/recorded-maria/fillers-dense.m4a" }
+    ],
     "tts": [
       { "voice": "Samantha", "file": "audio/tts/fillers-dense-samantha.aiff" },
       { "voice": "Paulina", "file": "audio/tts/fillers-dense-paulina.aiff" }

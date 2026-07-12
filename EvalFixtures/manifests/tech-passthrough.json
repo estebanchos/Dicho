@@ -8,6 +8,9 @@
   "tags": ["holdout"],
   "audio": {
     "recorded": "audio/recorded/tech-passthrough.m4a",
+    "additionalRecorded": [
+      { "name": "maria", "file": "audio/recorded-maria/tech-passthrough.m4a" }
+    ],
     "tts": [
       { "voice": "Samantha", "file": "audio/tts/tech-passthrough-samantha.aiff" },
       { "voice": "Paulina", "file": "audio/tts/tech-passthrough-paulina.aiff" }

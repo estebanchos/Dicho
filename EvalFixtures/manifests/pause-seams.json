@@ -8,6 +8,9 @@
   "tags": ["tuning"],
   "audio": {
     "recorded": "audio/recorded/pause-seams.m4a",
+    "additionalRecorded": [
+      { "name": "maria", "file": "audio/recorded-maria/pause-seams.m4a" }
+    ],
     "tts": [
       { "voice": "Samantha", "file": "audio/tts/pause-seams-samantha.aiff" },
       { "voice": "Paulina", "file": "audio/tts/pause-seams-paulina.aiff" }

@@ -8,6 +8,9 @@
   "tags": ["tuning"],
   "audio": {
     "recorded": "audio/recorded/guardrail-profanity.m4a",
+    "additionalRecorded": [
+      { "name": "maria", "file": "audio/recorded-maria/guardrail-profanity.m4a" }
+    ],
     "tts": [
       { "voice": "Samantha", "file": "audio/tts/guardrail-profanity-samantha.aiff" },
       { "voice": "Paulina", "file": "audio/tts/guardrail-profanity-paulina.aiff" }
