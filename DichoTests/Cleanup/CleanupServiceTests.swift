@@ -379,6 +379,30 @@ struct CleanupServiceTests {
         #expect(instructions.contains("the meeting is on Tuesday no wait on Thursday"))
     }
 
+    // MARK: - Failing-shape example rewrites (M12 eval iteration 2)
+
+    @Test("Scratch-that example shows the sentence-split marker shape")
+    func scratchThatExampleIsSentenceSplit() {
+        // Baseline evidence (M12.8): "…to Sarah. Scratch that, to Miguel."
+        // survived cleanup 5/5; the old example only showed the inline comma
+        // form. Iteration-1 lesson: example vocabulary must NOT mirror fixture
+        // text (input-echo failure), hence paint/blue/green.
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("paint the door blue. Scratch that, paint it green."))
+        #expect(instructions.contains("paint the door green."))
+    }
+
+    @Test("Correction example shows the mid-sentence continuation shape")
+    func correctionExampleIsMidSentenceContinuation() {
+        // Baseline evidence (M12.8): mid-sentence corrections where the
+        // sentence continues after the replacement ("…thirty percent more")
+        // survived cleanup 5/5; every old example ended the clause at the
+        // replacement.
+        let instructions = CleanupService.buildInstructions()
+        #expect(instructions.contains("it costs eight, correction, nine dollars per crate"))
+        #expect(instructions.contains("it costs nine dollars per crate"))
+    }
+
     @Test("Self-correction rule sits at the top of the rule list, before filler removal")
     func selfCorrectionRuleComesFirst() {
         // Priority position: the on-device model weights early instructions

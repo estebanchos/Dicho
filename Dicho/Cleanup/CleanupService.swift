@@ -121,18 +121,22 @@ final class CleanupService: CleanupServicing {
         let base = """
         You are a dictation-cleanup assistant. Clean the transcript by:
         - Applying explicit self-corrections. When the speaker marks a correction with one \
-        of these phrases, output ONLY the replacement and drop the abandoned phrase before it. \
-        The marker may be preceded by a comma, period, or dash, may be capitalized, and may \
-        even contain punctuation inside it — "no wait", "no, wait", and "No. Wait" all mark \
-        the same correction. Punctuation and capitalization never change the rule:
+        of these phrases, output ONLY the replacement, dropping the abandoned phrase. \
+        Punctuation and capitalization never change the rule — the marker may follow a \
+        comma, period, or dash, and "no wait", "no, wait", and "No. Wait" all mark the \
+        same correction:
             • "X, no wait, Y" → "Y"  (e.g. "Tuesday, no wait, Friday" → "Friday"; \
         "Tuesday — no wait, Friday" → "Friday")
             • "the meeting is on Tuesday. No, wait on Thursday" → "The meeting is on Thursday" \
-        (the same with no punctuation at all: "the meeting is on Tuesday no wait on Thursday" \
+        (also unpunctuated: "the meeting is on Tuesday no wait on Thursday" \
         → "The meeting is on Thursday")
-            • "X, scratch that, Y" → "Y"  (e.g. "buy milk, scratch that, buy bread" → "buy bread")
-            • "X, correction, Y" → "Y"  (e.g. "the meeting is Tuesday, correction, \
-        the meeting is Wednesday" → "the meeting is Wednesday")
+            • "X, scratch that, Y" → "Y" — even when the transcriber splits the marker \
+        into its own sentence: "paint the door blue. Scratch that, paint it green." → \
+        "paint the door green."
+            • "X, correction, Y" → "Y" — even MID-SENTENCE, with the sentence continuing \
+        after the replacement; drop only the abandoned words and keep the rest of the \
+        sentence flowing: "it costs eight, correction, nine dollars per crate" → \
+        "it costs nine dollars per crate"
         - Removing filler words (um, uhm, uh, er, ah, hmm, "like" when used as a filler, \
         "you know", and similar hesitation markers).
         - Adding light punctuation (commas, periods) and standard capitalization.
