@@ -100,11 +100,12 @@ enum EvalScorer {
                 if expected.surface != actual.surface {
                     if expected.folded == actual.folded {
                         deviations.append(EvalDeviation(kind: .casing, expected: expected.surface, actual: actual.surface))
-                    } else {
-                        // Normalized forms matched but folded surfaces differ —
-                        // only number normalization can produce this.
-                        deviations.append(EvalDeviation(kind: .numberFormat, expected: expected.surface, actual: actual.surface))
                     }
+                    // Normalized-match with differing folded surfaces = number
+                    // surface form ("thirty"/"30", "first"/"1st"). Developer
+                    // ruling 2026-07-12: digit rendering is acceptable output —
+                    // no deviation. (.numberFormat stays in DeviationKind so
+                    // pre-ruling reports still decode.)
                 }
                 if expected.leadingPunctuation != actual.leadingPunctuation
                     || expected.trailingPunctuation != actual.trailingPunctuation {

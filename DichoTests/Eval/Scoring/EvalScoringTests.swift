@@ -36,36 +36,32 @@ struct EvalScoringTests {
         #expect(deviations.allSatisfy { $0.severity == .minor && $0.kind == .punctuation })
     }
 
-    @Test("Digit vs spelled number is a minor number-format deviation")
-    func numberFormatIsMinor() {
+    @Test("Digit vs spelled number is not a deviation (developer ruling 2026-07-12)")
+    func numberFormatIsNotADeviation() {
         let deviations = EvalScorer.score(
             expected: "give it thirty years",
             actual: "give it 30 years"
         )
-        #expect(deviations.count == 1)
-        #expect(deviations[0].kind == .numberFormat)
-        #expect(deviations[0].severity == .minor)
+        #expect(deviations.isEmpty)
     }
 
-    @Test("Ordinal word vs digit ordinal is a minor number-format deviation")
-    func ordinalFormatIsMinor() {
+    @Test("Ordinal word vs digit ordinal is not a deviation (developer ruling 2026-07-12)")
+    func ordinalFormatIsNotADeviation() {
         let deviations = EvalScorer.score(
             expected: "the first year",
             actual: "the 1st year"
         )
-        #expect(deviations.count == 1)
-        #expect(deviations[0].kind == .numberFormat)
-        #expect(deviations[0].severity == .minor)
+        #expect(deviations.isEmpty)
     }
 
-    @Test("Multi-word spelled number matches its digit form")
+    @Test("Multi-word spelled number matches its digit form with no deviation")
     func multiWordNumberMatchesDigits() {
         let deviations = EvalScorer.score(
             expected: "you've got one thousand seventy dollars",
             actual: "you've got 1070 dollars"
         )
-        #expect(deviations.allSatisfy { $0.severity == .minor })
-        #expect(deviations.contains { $0.kind == .numberFormat })
+        #expect(!deviations.contains { $0.kind == .numberFormat })
+        #expect(!deviations.contains { $0.severity == .major })
     }
 
     @Test("Article absorbed into a number run: 'a thousand' matches '1000'")

@@ -1,10 +1,10 @@
 {
   "id": "numbers-ordinals",
-  "phenomenon": "number and ordinal stability: spoken forms must not churn (first -> 1st is the OPTIMIZATIONS #12 regression)",
+  "phenomenon": "number and ordinal stability: values must survive; surface form (first vs 1st) is acceptable per developer ruling 2026-07-12",
   "spoken": "You put in a thousand dollars at seven percent, so the first year you earn seventy bucks and end up with one thousand seventy. By the tenth year it compounds hard. We moved here on March third.",
   "expected": "You put in a thousand dollars at seven percent, so the first year you earn seventy bucks and end up with one thousand seventy. By the tenth year it compounds hard. We moved here on March third.",
   "mustContain": ["seven percent", "seventy"],
-  "mustNotContain": ["=1st", "=3rd"],
+  "mustNotContain": [],
   "tags": ["tuning"],
   "audio": {
     "recorded": "audio/recorded/numbers-ordinals.m4a",
