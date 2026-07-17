@@ -38,30 +38,81 @@ enum AsrABScoring {
     // MARK: - Spoken-reference score
 
     /// `EvalScorer.score(expected: spoken, actual: rawTopJoin)` output,
-    /// partitioned into content majors (the headline ASR metric) and minors
-    /// (casing/punctuation/whitespace/number-format — reported separately
-    /// since the two model families predictably differ here).
+    /// partitioned three ways. The headline A/B metric (`contentMajors`) must
+    /// not penalize model-level normalizations that are not accuracy errors
+    /// (2026-07-16 smoke-run finding, self-corrections-basic@recorded):
+    /// - `fillerDrops` — DELETIONS of lexicon fillers ("um"/"uh"/…).
+    ///   `DictationTranscriber` suppresses fillers in-model by design; scored
+    ///   against the manifest's `spoken` reference every suppressed filler
+    ///   would otherwise be a false content-major deletion (the fillers-dense
+    ///   fixture would swamp the real signal). Dicho's cleanup layer removes
+    ///   these downstream anyway, so an in-model drop costs nothing. Filler
+    ///   INSERTIONS keep EvalScorer's classification (`.fillerResidue`, major)
+    ///   — hallucinating a filler that was never spoken is a content error.
+    /// - diacritic-only substitutions ("cafe" → "café") land in `minors`:
+    ///   `EvalTokenizer` normalization does not fold diacritics, so these
+    ///   surface as substitutions, but they are cosmetic orthography, not
+    ///   content.
+    /// Both classes are still REPORTED — just not in the headline count.
     struct ArmScore: Codable, Equatable {
         let contentMajors: [EvalDeviation]
         let minors: [EvalDeviation]
+        let fillerDrops: [EvalDeviation]
     }
 
     /// Scores an arm's raw top-hypothesis join against the manifest's
     /// **spoken** field. No `mustContain`/`mustNotContain` and no
     /// `EvalIntermediates` — this is an ASR-layer-only comparison, not a
-    /// pipeline-layer attribution.
+    /// pipeline-layer attribution. Partition rules are documented on
+    /// `ArmScore`.
     static func score(spoken: String, rawTopJoin: String) -> ArmScore {
         let deviations = EvalScorer.score(expected: spoken, actual: rawTopJoin)
         var contentMajors: [EvalDeviation] = []
         var minors: [EvalDeviation] = []
+        var fillerDrops: [EvalDeviation] = []
         for deviation in deviations {
-            if deviation.severity == .major {
+            if isFillerDrop(deviation) {
+                fillerDrops.append(deviation)
+            } else if deviation.severity == .major && !isDiacriticOnlySubstitution(deviation) {
                 contentMajors.append(deviation)
             } else {
                 minors.append(deviation)
             }
         }
-        return ArmScore(contentMajors: contentMajors, minors: minors)
+        return ArmScore(contentMajors: contentMajors, minors: minors, fillerDrops: fillerDrops)
+    }
+
+    /// A deletion whose `expected`, run through EvalTokenizer normalization,
+    /// is a single unit in `EvalScorer.fillerLexicon` — in-model filler
+    /// suppression, not a content error. Deletions only: filler insertions
+    /// stay `.fillerResidue` majors per EvalScorer.
+    private static func isFillerDrop(_ deviation: EvalDeviation) -> Bool {
+        guard deviation.kind == .deletion, let expected = deviation.expected else { return false }
+        let normalized = EvalTokenizer.normalizedSequence(expected)
+        return normalized.count == 1 && EvalScorer.fillerLexicon.contains(normalized[0])
+    }
+
+    /// A substitution whose expected and actual are equal once their
+    /// EvalTokenizer-normalized forms are additionally folded
+    /// diacritic-and-case-insensitively ("cafe" ≡ "café") — cosmetic
+    /// orthography, demoted to a minor.
+    private static func isDiacriticOnlySubstitution(_ deviation: EvalDeviation) -> Bool {
+        guard deviation.kind == .substitution,
+              let expected = deviation.expected,
+              let actual = deviation.actual
+        else { return false }
+        let foldedExpected = foldedNormalizedSequence(expected)
+        return !foldedExpected.isEmpty && foldedExpected == foldedNormalizedSequence(actual)
+    }
+
+    /// EvalTokenizer's normalized token sequence with an additional
+    /// diacritic-insensitive fold applied per token. The fold lives here —
+    /// NOT in `EvalTokenizer` — because the M12 pipeline scorer's behavior
+    /// must stay untouched; only the A/B's fairness rules want it.
+    private static func foldedNormalizedSequence(_ text: String) -> [String] {
+        EvalTokenizer.normalizedSequence(text).map {
+            $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+        }
     }
 
     // MARK: - Ceiling-recovery matcher
@@ -130,14 +181,18 @@ enum AsrABScoring {
     /// `true` when `item.expected`'s normalized token sequence appears as a
     /// CONTIGUOUS subsequence of `join`'s normalized token sequence (reusing
     /// `EvalTokenizer`'s normalization — lowercased, punctuation-stripped,
-    /// number-canonicalized — rather than re-implementing it). `nil` when
-    /// there is no truth string to search for: `expected` is nil, or it
-    /// normalizes to nothing (pure punctuation).
+    /// number-canonicalized — rather than re-implementing it). Both sequences
+    /// get an additional diacritic-insensitive fold, applied here on the
+    /// sequences EvalTokenizer returns (never inside EvalTokenizer itself):
+    /// a truth of "café" must match a join containing "cafe" and vice versa —
+    /// recovery is about the WORD being reachable, not its orthography.
+    /// `nil` when there is no truth string to search for: `expected` is nil,
+    /// or it normalizes to nothing (pure punctuation).
     static func recovered(_ item: CeilingItem, inRawTopJoin join: String) -> Bool? {
         guard let expected = item.expected else { return nil }
-        let needle = EvalTokenizer.normalizedSequence(expected)
+        let needle = foldedNormalizedSequence(expected)
         guard !needle.isEmpty else { return nil }
-        let haystack = EvalTokenizer.normalizedSequence(join)
+        let haystack = foldedNormalizedSequence(join)
         return EvalTokenizer.containsSubsequence(haystack, needle)
     }
 
@@ -236,8 +291,12 @@ enum AsrABScoring {
         let rawTopJoin: String
         let contentMajorCount: Int
         let minorCount: Int
+        /// In-model filler suppressions (see `ArmScore.fillerDrops`) —
+        /// reported, never part of the headline content-major count.
+        let fillerDropCount: Int
         let contentMajors: [EvalDeviation]
         let minors: [EvalDeviation]
+        let fillerDrops: [EvalDeviation]
         let ceiling: CeilingRecovery
         let confidence: ConfidenceStats
         let gateFirings: Int
@@ -277,12 +336,13 @@ enum AsrABScoring {
         lines.append("")
 
         lines.append("## Per-arm aggregate")
-        lines.append("| arm | content majors | minors | ceiling recovered/total | median-of-medians confidence | gate firings | mean stop→last-final (s) |")
-        lines.append("|---|---|---|---|---|---|---|")
+        lines.append("| arm | content majors | minors | filler drops | ceiling recovered/total | median-of-medians confidence | gate firings | mean stop→last-final (s) |")
+        lines.append("|---|---|---|---|---|---|---|---|")
         for arm in report.arms {
             let armRecords = records.filter { $0.armName == arm }
             let totalContentMajors = armRecords.reduce(0) { $0 + $1.contentMajorCount }
             let totalMinors = armRecords.reduce(0) { $0 + $1.minorCount }
+            let totalFillerDrops = armRecords.reduce(0) { $0 + $1.fillerDropCount }
             let ceilingRecovered = armRecords.reduce(0) { $0 + $1.ceiling.recovered }
             let ceilingTotal = armRecords.reduce(0) { $0 + $1.ceiling.total }
             let medianOfMedians = median(ofSorted: armRecords.compactMap(\.confidence.median).sorted())
@@ -291,10 +351,11 @@ enum AsrABScoring {
                 ? 0
                 : armRecords.reduce(0) { $0 + $1.stopToLastFinalSeconds } / Double(armRecords.count)
             lines.append(String(
-                format: "| %@ | %d | %d | %d/%d | %@ | %d | %.2f |",
+                format: "| %@ | %d | %d | %d | %d/%d | %@ | %d | %.2f |",
                 arm,
                 totalContentMajors,
                 totalMinors,
+                totalFillerDrops,
                 ceilingRecovered,
                 ceilingTotal,
                 medianOfMedians.map { String(format: "%.2f", $0) } ?? "–",
@@ -305,15 +366,16 @@ enum AsrABScoring {
         lines.append("")
 
         lines.append("## Per-fixture comparison")
-        lines.append("| fixture | arm | repeat | content majors | ceiling recovered/total |")
-        lines.append("|---|---|---|---|---|")
+        lines.append("| fixture | arm | repeat | content majors | filler drops | ceiling recovered/total |")
+        lines.append("|---|---|---|---|---|---|")
         for record in records {
             lines.append(String(
-                format: "| %@ | %@ | %d | %d | %d/%d |",
+                format: "| %@ | %@ | %d | %d | %d | %d/%d |",
                 record.fixtureID,
                 record.armName,
                 record.repeatIndex,
                 record.contentMajorCount,
+                record.fillerDropCount,
                 record.ceiling.recovered,
                 record.ceiling.total
             ))

@@ -53,6 +53,7 @@ struct AsrABScoringTests {
         #expect(result.contentMajors.count == 1)
         #expect(result.contentMajors[0].kind == .substitution)
         #expect(result.minors.isEmpty)
+        #expect(result.fillerDrops.isEmpty)
     }
 
     @Test("A casing-only difference lands in minors, not contentMajors")
@@ -61,6 +62,48 @@ struct AsrABScoringTests {
         #expect(result.contentMajors.isEmpty)
         #expect(!result.minors.isEmpty)
         #expect(result.minors.allSatisfy { $0.severity == .minor })
+    }
+
+    @Test("A deleted filler lands in fillerDrops, not contentMajors")
+    func scorePartitionsFillerDeletionAsFillerDrop() {
+        // "Um" capitalized on purpose: the lexicon check must run on the
+        // EvalTokenizer-normalized form, not the surface.
+        let result = AsrABScoring.score(spoken: "Um so I was thinking, uh, we should repaint", rawTopJoin: "so I was thinking, we should repaint")
+        #expect(result.fillerDrops.count == 2)
+        #expect(result.fillerDrops.allSatisfy { $0.kind == .deletion })
+        #expect(result.contentMajors.isEmpty)
+    }
+
+    @Test("A non-filler deletion is still a content major")
+    func scorePartitionsRealDeletionAsMajor() {
+        let result = AsrABScoring.score(spoken: "she saved every dime she earned", rawTopJoin: "she saved every she earned")
+        #expect(result.contentMajors.count == 1)
+        #expect(result.contentMajors[0].kind == .deletion)
+        #expect(result.fillerDrops.isEmpty)
+    }
+
+    @Test("An inserted filler keeps EvalScorer's fillerResidue classification (major)")
+    func scorePartitionsFillerInsertionAsMajor() {
+        let result = AsrABScoring.score(spoken: "so I left", rawTopJoin: "um so I left")
+        #expect(result.contentMajors.count == 1)
+        #expect(result.contentMajors[0].kind == .fillerResidue)
+        #expect(result.fillerDrops.isEmpty)
+    }
+
+    @Test("A diacritic-only substitution lands in minors, not contentMajors")
+    func scorePartitionsDiacriticOnlySubstitutionAsMinor() {
+        let result = AsrABScoring.score(spoken: "meet me at the cafe on Main", rawTopJoin: "meet me at the café on Main")
+        #expect(result.contentMajors.isEmpty)
+        #expect(result.minors.count == 1)
+        #expect(result.minors[0].kind == .substitution)
+        #expect(result.fillerDrops.isEmpty)
+    }
+
+    @Test("A diacritic-only substitution is minor in the reverse direction too")
+    func scorePartitionsDiacriticOnlySubstitutionReverse() {
+        let result = AsrABScoring.score(spoken: "meet me at the café on Main", rawTopJoin: "meet me at the cafe on Main")
+        #expect(result.contentMajors.isEmpty)
+        #expect(result.minors.count == 1)
     }
 
     // MARK: - ceilingItems decoding
@@ -155,6 +198,18 @@ struct AsrABScoringTests {
     func recoveredNilExpectedIsNil() {
         let item = AsrABScoring.CeilingItem(fixtureID: "f", expected: nil, actual: "screw")
         #expect(AsrABScoring.recovered(item, inRawTopJoin: "anything at all") == nil)
+    }
+
+    @Test("Accented truth recovers from an unaccented join")
+    func recoveredDiacriticTruthMatchesPlainJoin() {
+        let item = AsrABScoring.CeilingItem(fixtureID: "f", expected: "café", actual: "coffee")
+        #expect(AsrABScoring.recovered(item, inRawTopJoin: "the cafe on main street") == true)
+    }
+
+    @Test("Plain truth recovers from an accented join")
+    func recoveredPlainTruthMatchesDiacriticJoin() {
+        let item = AsrABScoring.CeilingItem(fixtureID: "f", expected: "cafe", actual: "coffee")
+        #expect(AsrABScoring.recovered(item, inRawTopJoin: "the café on main street") == true)
     }
 
     @Test("Expected that normalizes to nothing (pure punctuation) is unmatchable")
@@ -297,8 +352,10 @@ struct AsrABScoringTests {
                 rawTopJoin: "some text",
                 contentMajorCount: majors,
                 minorCount: 0,
+                fillerDropCount: 2,
                 contentMajors: [],
                 minors: [],
+                fillerDrops: [],
                 ceiling: AsrABScoring.CeilingRecovery(total: total, recovered: recovered, unmatchable: 0),
                 confidence: AsrABScoring.ConfidenceStats(count: 1, minimum: 0.5, median: 0.5, deciles: Array(repeating: 0, count: 10)),
                 gateFirings: 0,
@@ -328,6 +385,17 @@ struct AsrABScoringTests {
         #expect(markdown.contains("fixture-a"))
         #expect(markdown.contains("fixture-b"))
         #expect(markdown.contains("fixture-c")) // skipped section
+    }
+
+    @Test("summaryMarkdown carries the filler-drops column in both tables")
+    func summaryMarkdownContainsFillerDropsColumn() {
+        let markdown = AsrABScoring.summaryMarkdown(for: Self.sampleReport())
+        // Column header appears in the per-arm aggregate AND per-fixture tables.
+        let headerOccurrences = markdown.components(separatedBy: "filler drops").count - 1
+        #expect(headerOccurrences >= 2)
+        // Each sample record carries fillerDropCount 2; the per-arm rows (one
+        // record per arm) must show the aggregate 2.
+        #expect(markdown.contains("| 2 |"))
     }
 
     @Test("summaryMarkdown is deterministic regardless of input record order")
