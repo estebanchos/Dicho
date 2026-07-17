@@ -316,14 +316,19 @@ enum AsrABScoring {
         let skipped: [String]
     }
 
-    /// Renders `summary.md`: a per-arm aggregate table, a per-fixture
-    /// comparison table, then a ceiling-recovery detail section. Ordering is
-    /// deterministic (sorted by fixtureID, then armName, then repeatIndex)
-    /// regardless of the input records' order, so re-running the renderer
-    /// over the same report never produces a diff-noise reorder.
+    /// Renders `summary.md`: per-arm aggregate tables (one PER VARIANT — the
+    /// M12 protocol split means "recorded" GATES while every other variant is
+    /// a reported-only canary, so decision-gate numbers must be readable per
+    /// variant, never blended), a per-fixture comparison table, then a
+    /// ceiling-recovery detail section. Ordering is deterministic (variants:
+    /// "recorded" first, others alphabetical; records: sorted by fixtureID,
+    /// then variant, then armName, then repeatIndex) regardless of the input
+    /// records' order, so re-running the renderer over the same report never
+    /// produces a diff-noise reorder.
     static func summaryMarkdown(for report: AsrABReport) -> String {
         let records = report.records.sorted {
-            ($0.fixtureID, $0.armName, $0.repeatIndex) < ($1.fixtureID, $1.armName, $1.repeatIndex)
+            ($0.fixtureID, $0.variant, $0.armName, $0.repeatIndex)
+                < ($1.fixtureID, $1.variant, $1.armName, $1.repeatIndex)
         }
 
         var lines: [String] = []
@@ -336,42 +341,55 @@ enum AsrABScoring {
         lines.append("")
 
         lines.append("## Per-arm aggregate")
-        lines.append("| arm | content majors | minors | filler drops | ceiling recovered/total | median-of-medians confidence | gate firings | mean stop→last-final (s) |")
-        lines.append("|---|---|---|---|---|---|---|---|")
-        for arm in report.arms {
-            let armRecords = records.filter { $0.armName == arm }
-            let totalContentMajors = armRecords.reduce(0) { $0 + $1.contentMajorCount }
-            let totalMinors = armRecords.reduce(0) { $0 + $1.minorCount }
-            let totalFillerDrops = armRecords.reduce(0) { $0 + $1.fillerDropCount }
-            let ceilingRecovered = armRecords.reduce(0) { $0 + $1.ceiling.recovered }
-            let ceilingTotal = armRecords.reduce(0) { $0 + $1.ceiling.total }
-            let medianOfMedians = median(ofSorted: armRecords.compactMap(\.confidence.median).sorted())
-            let firings = armRecords.reduce(0) { $0 + $1.gateFirings }
-            let meanStop = armRecords.isEmpty
-                ? 0
-                : armRecords.reduce(0) { $0 + $1.stopToLastFinalSeconds } / Double(armRecords.count)
-            lines.append(String(
-                format: "| %@ | %d | %d | %d | %d/%d | %@ | %d | %.2f |",
-                arm,
-                totalContentMajors,
-                totalMinors,
-                totalFillerDrops,
-                ceilingRecovered,
-                ceilingTotal,
-                medianOfMedians.map { String(format: "%.2f", $0) } ?? "–",
-                firings,
-                meanStop
-            ))
+        // One aggregate table per variant: "recorded" is the sole gating
+        // variant (M12.8 ruling), everything else is a reported-only canary —
+        // their sums must never blend into one row.
+        let variants = Set(records.map(\.variant)).sorted { a, b in
+            if a == "recorded" { return true }
+            if b == "recorded" { return false }
+            return a < b
+        }
+        for variant in variants {
+            lines.append("")
+            lines.append(variant == "recorded" ? "### recorded (gating)" : "### \(variant) (canary)")
+            lines.append("| arm | content majors | minors | filler drops | ceiling recovered/total | median-of-medians confidence | gate firings | mean stop→last-final (s) |")
+            lines.append("|---|---|---|---|---|---|---|---|")
+            for arm in report.arms {
+                let armRecords = records.filter { $0.armName == arm && $0.variant == variant }
+                let totalContentMajors = armRecords.reduce(0) { $0 + $1.contentMajorCount }
+                let totalMinors = armRecords.reduce(0) { $0 + $1.minorCount }
+                let totalFillerDrops = armRecords.reduce(0) { $0 + $1.fillerDropCount }
+                let ceilingRecovered = armRecords.reduce(0) { $0 + $1.ceiling.recovered }
+                let ceilingTotal = armRecords.reduce(0) { $0 + $1.ceiling.total }
+                let medianOfMedians = median(ofSorted: armRecords.compactMap(\.confidence.median).sorted())
+                let firings = armRecords.reduce(0) { $0 + $1.gateFirings }
+                let meanStop = armRecords.isEmpty
+                    ? 0
+                    : armRecords.reduce(0) { $0 + $1.stopToLastFinalSeconds } / Double(armRecords.count)
+                lines.append(String(
+                    format: "| %@ | %d | %d | %d | %d/%d | %@ | %d | %.2f |",
+                    arm,
+                    totalContentMajors,
+                    totalMinors,
+                    totalFillerDrops,
+                    ceilingRecovered,
+                    ceilingTotal,
+                    medianOfMedians.map { String(format: "%.2f", $0) } ?? "–",
+                    firings,
+                    meanStop
+                ))
+            }
         }
         lines.append("")
 
         lines.append("## Per-fixture comparison")
-        lines.append("| fixture | arm | repeat | content majors | filler drops | ceiling recovered/total |")
-        lines.append("|---|---|---|---|---|---|")
+        lines.append("| fixture | variant | arm | repeat | content majors | filler drops | ceiling recovered/total |")
+        lines.append("|---|---|---|---|---|---|---|")
         for record in records {
             lines.append(String(
-                format: "| %@ | %@ | %d | %d | %d | %d/%d |",
+                format: "| %@ | %@ | %@ | %d | %d | %d | %d/%d |",
                 record.fixtureID,
+                record.variant,
                 record.armName,
                 record.repeatIndex,
                 record.contentMajorCount,

@@ -343,10 +343,10 @@ struct AsrABScoringTests {
     // MARK: - summaryMarkdown
 
     private static func sampleReport() -> AsrABScoring.AsrABReport {
-        func record(fixtureID: String, arm: String, repeatIndex: Int, majors: Int, recovered: Int, total: Int) -> AsrABScoring.AsrABFixtureArmRecord {
+        func record(fixtureID: String, arm: String, repeatIndex: Int, majors: Int, recovered: Int, total: Int, variant: String = "recorded") -> AsrABScoring.AsrABFixtureArmRecord {
             AsrABScoring.AsrABFixtureArmRecord(
                 fixtureID: fixtureID,
-                variant: "recorded",
+                variant: variant,
                 armName: arm,
                 repeatIndex: repeatIndex,
                 rawTopJoin: "some text",
@@ -385,6 +385,76 @@ struct AsrABScoringTests {
         #expect(markdown.contains("fixture-a"))
         #expect(markdown.contains("fixture-b"))
         #expect(markdown.contains("fixture-c")) // skipped section
+    }
+
+    @Test("summaryMarkdown marks the recorded variant as gating in its aggregate heading")
+    func summaryMarkdownMarksRecordedAsGating() {
+        let markdown = AsrABScoring.summaryMarkdown(for: Self.sampleReport())
+        #expect(markdown.contains("### recorded (gating)"))
+    }
+
+    @Test("summaryMarkdown per-fixture table carries a variant column")
+    func summaryMarkdownPerFixtureHasVariantColumn() {
+        let markdown = AsrABScoring.summaryMarkdown(for: Self.sampleReport())
+        #expect(markdown.contains("| fixture | variant | arm | repeat |"))
+        #expect(markdown.contains("| fixture-a | recorded | baseline |"))
+    }
+
+    @Test("summaryMarkdown splits per-arm aggregates by variant, recorded first, sums independent")
+    func summaryMarkdownSplitsAggregatesByVariant() {
+        func record(fixtureID: String, arm: String, variant: String, majors: Int) -> AsrABScoring.AsrABFixtureArmRecord {
+            AsrABScoring.AsrABFixtureArmRecord(
+                fixtureID: fixtureID,
+                variant: variant,
+                armName: arm,
+                repeatIndex: 0,
+                rawTopJoin: "some text",
+                contentMajorCount: majors,
+                minorCount: 0,
+                fillerDropCount: 0,
+                contentMajors: [],
+                minors: [],
+                fillerDrops: [],
+                ceiling: AsrABScoring.CeilingRecovery(total: 0, recovered: 0, unmatchable: 0),
+                confidence: AsrABScoring.ConfidenceStats(count: 1, minimum: 0.5, median: 0.5, deciles: Array(repeating: 0, count: 10)),
+                gateFirings: 0,
+                segmentCount: 1,
+                alternativesPerFinal: [1],
+                stopToLastFinalSeconds: 1.0
+            )
+        }
+        let report = AsrABScoring.AsrABReport(
+            label: "split",
+            timestamp: "20260717-000000",
+            gitCommit: "abc1234",
+            arms: ["baseline"],
+            records: [
+                // Canary listed FIRST in the input to prove ordering is
+                // imposed by the renderer, not inherited from the caller.
+                record(fixtureID: "f", arm: "baseline", variant: "recorded:maria", majors: 5),
+                record(fixtureID: "f", arm: "baseline", variant: "recorded", majors: 2),
+            ],
+            skipped: []
+        )
+        let markdown = AsrABScoring.summaryMarkdown(for: report)
+
+        let gatingHeading = "### recorded (gating)"
+        let canaryHeading = "### recorded:maria (canary)"
+        let gatingRange = markdown.range(of: gatingHeading)
+        let canaryRange = markdown.range(of: canaryHeading)
+        #expect(gatingRange != nil)
+        #expect(canaryRange != nil)
+        guard let gatingRange, let canaryRange else { return }
+        // Gating section renders before the canary section.
+        #expect(gatingRange.lowerBound < canaryRange.lowerBound)
+
+        // Independent sums: the gating section's baseline row shows 2 majors,
+        // the canary section's shows 5 — never a blended 7.
+        let gatingSection = String(markdown[gatingRange.upperBound..<canaryRange.lowerBound])
+        let canarySection = String(markdown[canaryRange.upperBound...])
+        #expect(gatingSection.contains("| baseline | 2 |"))
+        #expect(canarySection.contains("| baseline | 5 |"))
+        #expect(!markdown.contains("| baseline | 7 |"))
     }
 
     @Test("summaryMarkdown carries the filler-drops column in both tables")
