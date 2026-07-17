@@ -1,0 +1,8 @@
+{
+  "maxRecoverableMajors": 27,
+  "maxMinorsPer100Words": 8.0,
+  "latencyShortP50": 3.2,
+  "latencyShortMax": 3.4,
+  "latencyLongP50": 14.0,
+  "latencyLongMax": 15.0
+}

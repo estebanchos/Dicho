@@ -30,6 +30,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+
+#if DEBUG
+        // M12 eval harness: eval runs host the test bundle inside this app
+        // process (TEST_HOST) with DICHO_EVAL=1 forwarded by xcodebuild. Skip
+        // the status item, onboarding, permission flow, and pipeline so the
+        // app's own hotkey tap and mic request stay quiet — the harness builds
+        // its own pipeline graph. See Documentation/eval_harness_plan.md.
+        if ProcessInfo.processInfo.environment["DICHO_EVAL"] == "1" {
+            print("[DEBUG] DICHO_EVAL=1 — skipping app pipeline launch for eval run")
+            return
+        }
+#endif
+
         setupStatusItem()
 
         onboardingController = OnboardingWindowController(settings: settings)
@@ -162,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// state so the status-item icon and menu stay in sync.
     private func launchPipeline() {
         let audio        = AudioCapture()
-        let transcription = TranscriptionEngine(audioCapture: audio)
+        let transcription = TranscriptionEngine(audioSource: audio)
         let coordinator  = DictationCoordinator(
             hotkeyMonitor: HotkeyMonitor(),
             audioCapture: audio,

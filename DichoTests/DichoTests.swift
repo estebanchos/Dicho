@@ -15,7 +15,16 @@ struct ScaffoldTests {
         let _: (any CleanupServicing)? = nil
         let _: (any TextInserting)? = nil
         let _: (any ActiveAppProviding)? = nil
+        let _: (any AnalyzerAudioSource)? = nil
         #expect(Bool(true))
+    }
+
+    @Test("AudioCapture provides the engine-facing analyzer audio source seam")
+    func audioCaptureConformsToAnalyzerAudioSource() {
+        // Compile-time proof (M12): the engine's buffer-handoff coupling is a
+        // protocol, so eval-harness file sources can stand in for the mic.
+        let source: any AnalyzerAudioSource = AudioCapture()
+        #expect(source is AudioCapture)
     }
 
     @Test("Constants are within expected ranges")

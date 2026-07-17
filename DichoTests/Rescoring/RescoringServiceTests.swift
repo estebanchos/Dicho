@@ -277,6 +277,18 @@ struct RescoringPromptTests {
         #expect(instructions.contains("gonna"))
     }
 
+    @Test("Snap rule carries a worked example of the forbidden formal switch")
+    func snapRuleHasWorkedExample() {
+        // Retro-B diagnosis 2026-07-12: most rescoring-missed majors on the
+        // recorded pool had the truth IN candidate 0 — the selector switched
+        // away to a formal variant despite the prose-only rule ("gotta"→
+        // "got", "manage"→"managed", "are"→"you're"). A worked example
+        // anchors the snap rule the way M9 showed this model needs.
+        let instructions = RescoringService.buildInstructions()
+        #expect(instructions.contains("\"we gotta patch the roof\""))
+        #expect(instructions.localizedCaseInsensitiveContains("answer 0"))
+    }
+
     @Test("buildPrompt numbers candidates from zero and embeds the context")
     func promptEmbedsNumberedCandidates() {
         let prompt = RescoringService.buildPrompt(

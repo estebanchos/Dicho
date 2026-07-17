@@ -1,0 +1,19 @@
+{
+  "id": "fillers-dense",
+  "phenomenon": "filler removal across the full lexicon (um/uh/er/ah/hmm/uhm)",
+  "spoken": "Um so I was thinking that uh we should er probably repaint the kitchen. Ah maybe a light green, hmm or possibly gray. Uhm the hallway needs new lamps too, and uh the garden fence is falling apart.",
+  "expected": "So I was thinking that we should probably repaint the kitchen. Maybe a light green, or possibly gray. The hallway needs new lamps too, and the garden fence is falling apart.",
+  "mustContain": ["repaint the kitchen", "garden fence"],
+  "mustNotContain": ["um", "uh", "er", "ah", "hmm", "uhm"],
+  "tags": ["tuning"],
+  "audio": {
+    "recorded": "audio/recorded/fillers-dense.m4a",
+    "additionalRecorded": [
+      { "name": "maria", "file": "audio/recorded-maria/fillers-dense.m4a" }
+    ],
+    "tts": [
+      { "voice": "Samantha", "file": "audio/tts/fillers-dense-samantha.aiff" },
+      { "voice": "Paulina", "file": "audio/tts/fillers-dense-paulina.aiff" }
+    ]
+  }
+}
