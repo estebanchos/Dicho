@@ -5,8 +5,9 @@
 <h1 align="center">Dicho</h1>
 
 <p align="center">
+  <a href="https://github.com/estebanchos/Dicho/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/estebanchos/Dicho/actions/workflows/tests.yml/badge.svg?branch=main"></a>
   <img alt="SwiftUI" src="https://img.shields.io/badge/SwiftUI-0A84FF?logo=swift&logoColor=white">
-  <img alt="Swift 5" src="https://img.shields.io/badge/Swift%205-F05138?logo=swift&logoColor=white">
+  <img alt="Swift 6" src="https://img.shields.io/badge/Swift%206-F05138?logo=swift&logoColor=white">
   <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white">
   <img alt="SpeechAnalyzer" src="https://img.shields.io/badge/SpeechAnalyzer-5E5CE6">
   <img alt="Foundation Models" src="https://img.shields.io/badge/Foundation%20Models-BF5AF2">
@@ -48,7 +49,7 @@ Dicho is at **v0** and actively evolving. Planned work:
 
 | Layer | Technology |
 | --- | --- |
-| Language | Swift 5 |
+| Language | Swift 6 |
 | UI | SwiftUI (Settings, Onboarding, HUD) + AppKit shell |
 | Speech-to-text | Apple Speech (SpeechAnalyzer / SpeechTranscriber) |
 | Text cleanup | Apple Foundation Models (on-device) |

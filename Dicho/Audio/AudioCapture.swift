@@ -7,9 +7,11 @@ import Speech
 /// `AVAudioPCMBuffer` to the format SpeechAnalyzer requires, and yields
 /// `AnalyzerInput` values to the shared `analyzerContinuation`.
 ///
-/// - Note: `@unchecked Sendable` — all mutable state is guarded by `stateLock`
-///   or accessed only from the audio engine's tap queue, which is always the
-///   same serial background queue per engine instance.
+/// - Note: `@unchecked Sendable` — mutable state is written only from the main
+///   thread (`startCapture`/`stopCapture`/`beginSession`, all called by the
+///   `@MainActor` coordinator and engine). The tap closure reads `isRunning` and
+///   the continuation from the engine's serial tap queue; a stale read is benign
+///   (a late buffer is dropped or yielded to an already-finished continuation).
 final class AudioCapture: AudioCapturing, AnalyzerAudioSource, @unchecked Sendable {
 
     // MARK: - AudioCapturing
@@ -40,19 +42,16 @@ final class AudioCapture: AudioCapturing, AnalyzerAudioSource, @unchecked Sendab
             converter = nil
         }
 
-        let continuation = analyzerContinuation
-
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: nativeFormat) { [weak self] buffer, _ in
-            guard let self, self.isRunning else { return }
-
-            let outBuffer: AVAudioPCMBuffer
-            if let converter, let converted = Self.convert(buffer, using: converter, to: targetFmt) {
-                outBuffer = converted
-            } else {
-                outBuffer = buffer
-            }
-            continuation?.yield(AnalyzerInput(buffer: outBuffer))
-        }
+        inputNode.installTap(
+            onBus: 0,
+            bufferSize: 4096,
+            format: nativeFormat,
+            block: makeTapBlock(
+                converter: converter,
+                targetFormat: targetFmt,
+                continuation: analyzerContinuation
+            )
+        )
 
         try engine.start()
         self.engine = engine
@@ -83,7 +82,11 @@ final class AudioCapture: AudioCapturing, AnalyzerAudioSource, @unchecked Sendab
     private let errorContinuation: AsyncStream<AudioCaptureError>.Continuation
 
     private var engine: AVAudioEngine?
-    private var isRunning = false
+    // nonisolated(unsafe): written only on the main thread (startCapture/
+    // stopCapture); read on the engine's tap queue by the tap block. A stale
+    // read is benign — a late buffer is dropped or yielded to an
+    // already-finished continuation.
+    nonisolated(unsafe) private var isRunning = false
     private var analyzerContinuation: AsyncStream<AnalyzerInput>.Continuation?
     private(set) var targetFormat: AVAudioFormat?
 
@@ -91,7 +94,33 @@ final class AudioCapture: AudioCapturing, AnalyzerAudioSource, @unchecked Sendab
         (errorStream, errorContinuation) = AsyncStream.makeStream(of: AudioCaptureError.self)
     }
 
-    private static func convert(
+    /// Builds the tap block in a nonisolated context. AVAudioEngine invokes it
+    /// on its tap queue (`RealtimeMessenger.mServiceQueue`), never the main
+    /// actor — forming the closure here keeps it out of the module's MainActor
+    /// default, so Swift 6's dynamic isolation enforcement injects no
+    /// main-queue assertion (the SDK's `AVAudioNodeTapBlock` carries no
+    /// concurrency annotations; the mismatch traps only at runtime — caught in
+    /// M13 manual verification).
+    private nonisolated func makeTapBlock(
+        converter: AVAudioConverter?,
+        targetFormat: AVAudioFormat,
+        continuation: AsyncStream<AnalyzerInput>.Continuation?
+    ) -> AVAudioNodeTapBlock {
+        { [weak self] buffer, _ in
+            guard let self, self.isRunning else { return }
+
+            let outBuffer: AVAudioPCMBuffer
+            if let converter, let converted = Self.convert(buffer, using: converter, to: targetFormat) {
+                outBuffer = converted
+            } else {
+                outBuffer = buffer
+            }
+            continuation?.yield(AnalyzerInput(buffer: outBuffer))
+        }
+    }
+
+    // nonisolated: invoked from the engine's tap queue, never the main actor.
+    private nonisolated static func convert(
         _ buffer: AVAudioPCMBuffer,
         using converter: AVAudioConverter,
         to format: AVAudioFormat
@@ -102,16 +131,25 @@ final class AudioCapture: AudioCapturing, AnalyzerAudioSource, @unchecked Sendab
         guard let out = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity) else {
             return nil
         }
+        // The SDK types the input block as `@Sendable`, but
+        // `convert(to:error:withInputFrom:)` invokes it synchronously on the
+        // calling thread — `Input` is never accessed concurrently, hence
+        // `@unchecked Sendable`.
+        nonisolated final class Input: @unchecked Sendable {
+            var consumed = false
+            let buffer: AVAudioPCMBuffer
+            init(_ buffer: AVAudioPCMBuffer) { self.buffer = buffer }
+        }
+        let input = Input(buffer)
         var error: NSError?
-        var consumed = false
         converter.convert(to: out, error: &error) { _, status in
-            if consumed {
+            if input.consumed {
                 status.pointee = .noDataNow
                 return nil
             }
-            consumed = true
+            input.consumed = true
             status.pointee = .haveData
-            return buffer
+            return input.buffer
         }
         return error == nil ? out : nil
     }

@@ -1,7 +1,10 @@
 import Foundation
 
 /// Application-wide constants. All timing values are in seconds unless noted.
-enum Constants {
+///
+/// `nonisolated`: immutable Sendable values, opted out of the module's
+/// MainActor default so any isolation (eval scoring, tests) can read them.
+nonisolated enum Constants {
     /// Delay before restoring the pasteboard after a synthetic paste.
     /// Must outlast the system's paste handling latency; too short races the
     /// paste (clipboard managers see our text, not the original), too long

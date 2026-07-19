@@ -8,7 +8,10 @@ import Foundation
 /// (low minimum per-run confidence) AND genuinely ambiguous (alternatives that
 /// differ lexically, not just in punctuation or casing). Everything else
 /// passes through as the transcriber's top hypothesis.
-enum RescoringGate {
+///
+/// `nonisolated`: pure functions over Sendable data, opted out of the module's
+/// MainActor default so any isolation (eval scoring, tests) can call them.
+nonisolated enum RescoringGate {
 
     /// Returns `true` when `update` should be routed to the selector.
     ///

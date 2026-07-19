@@ -197,16 +197,23 @@ final class FileAudioCapture: AudioCapturing, AnalyzerAudioSource, @unchecked Se
         guard let out = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity) else {
             return nil
         }
+        // Mirrors production AudioCapture.convert: the SDK types the input
+        // block as `@Sendable`, but it runs synchronously inside `convert`.
+        final class Input: @unchecked Sendable {
+            var consumed = false
+            let buffer: AVAudioPCMBuffer
+            init(_ buffer: AVAudioPCMBuffer) { self.buffer = buffer }
+        }
+        let input = Input(buffer)
         var error: NSError?
-        var consumed = false
         converter.convert(to: out, error: &error) { _, status in
-            if consumed {
+            if input.consumed {
                 status.pointee = .noDataNow
                 return nil
             }
-            consumed = true
+            input.consumed = true
             status.pointee = .haveData
-            return buffer
+            return input.buffer
         }
         return error == nil ? out : nil
     }

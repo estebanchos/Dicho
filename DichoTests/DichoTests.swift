@@ -3,6 +3,7 @@ import Testing
 @testable import Dicho
 
 /// Verifies the M0 scaffold: protocol seams are visible and constants are sane.
+@MainActor
 @Suite("M0 Scaffold")
 struct ScaffoldTests {
 

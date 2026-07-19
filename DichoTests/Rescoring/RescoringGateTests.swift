@@ -5,6 +5,7 @@ import Testing
 /// Pure gate logic for M10 rescoring (TASKS.md 10.3): only genuinely ambiguous
 /// FINAL segments go to the model selector; everything else passes through
 /// untouched. No model, no Speech — plain value-type decisions.
+@MainActor
 @Suite("RescoringGate — deterministic pass-through vs rescore (M10)")
 struct RescoringGateTests {
 
