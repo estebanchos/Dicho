@@ -5,7 +5,11 @@ import Foundation
 /// Volatile results (isFinal == false) are provisional and will be superseded;
 /// the HUD must *replace* — not append — the volatile text for its range.
 /// Final results are stable and should be forwarded to the cleanup queue.
-struct TranscriptUpdate: Sendable {
+///
+/// `nonisolated`: pure Sendable data, opted out of the module's MainActor
+/// default so any isolation (tests, eval scoring, background tasks) can
+/// construct and read it.
+nonisolated struct TranscriptUpdate: Sendable {
     /// The recognized text for this segment.
     let text: String
     /// The range within the full in-progress transcript that this update covers.

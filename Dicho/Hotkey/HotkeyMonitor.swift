@@ -6,17 +6,26 @@ import Foundation
 private let kVKEscape: CGKeyCode = 53
 
 /// File-scope CGEventTap callback. `refcon` carries an unretained HotkeyMonitor.
-/// Using a free function (not a closure) satisfies the @convention(c) requirement.
-private func tapEventCallback(
+/// Using a free function (not a closure) satisfies the @convention(c) requirement;
+/// `nonisolated` opts it out of the module's MainActor default, which a C function
+/// pointer cannot carry. The tap is sourced into the main run loop (see `start()`),
+/// so callbacks always arrive on the main thread — `MainActor.assumeIsolated` is
+/// sound and traps rather than races if that invariant is ever broken.
+private nonisolated func tapEventCallback(
     _: CGEventTapProxy,
     _ type: CGEventType,
     _ event: CGEvent,
     _ refcon: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
     if let refcon {
-        Unmanaged<HotkeyMonitor>.fromOpaque(refcon)
-            .takeUnretainedValue()
-            .handleRaw(type: type, event: event)
+        let monitor = Unmanaged<HotkeyMonitor>.fromOpaque(refcon).takeUnretainedValue()
+        // nonisolated(unsafe): CGEvent is not Sendable, but this crossing is safe —
+        // the closure runs synchronously on this same (main) thread, and the event
+        // is not accessed concurrently.
+        nonisolated(unsafe) let event = event
+        MainActor.assumeIsolated {
+            monitor.handleRaw(type: type, event: event)
+        }
     }
     return Unmanaged.passUnretained(event)
 }

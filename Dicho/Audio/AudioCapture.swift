@@ -7,9 +7,11 @@ import Speech
 /// `AVAudioPCMBuffer` to the format SpeechAnalyzer requires, and yields
 /// `AnalyzerInput` values to the shared `analyzerContinuation`.
 ///
-/// - Note: `@unchecked Sendable` — all mutable state is guarded by `stateLock`
-///   or accessed only from the audio engine's tap queue, which is always the
-///   same serial background queue per engine instance.
+/// - Note: `@unchecked Sendable` — mutable state is written only from the main
+///   thread (`startCapture`/`stopCapture`/`beginSession`, all called by the
+///   `@MainActor` coordinator and engine). The tap closure reads `isRunning` and
+///   the continuation from the engine's serial tap queue; a stale read is benign
+///   (a late buffer is dropped or yielded to an already-finished continuation).
 final class AudioCapture: AudioCapturing, AnalyzerAudioSource, @unchecked Sendable {
 
     // MARK: - AudioCapturing
@@ -91,7 +93,8 @@ final class AudioCapture: AudioCapturing, AnalyzerAudioSource, @unchecked Sendab
         (errorStream, errorContinuation) = AsyncStream.makeStream(of: AudioCaptureError.self)
     }
 
-    private static func convert(
+    // nonisolated: invoked from the engine's tap queue, never the main actor.
+    private nonisolated static func convert(
         _ buffer: AVAudioPCMBuffer,
         using converter: AVAudioConverter,
         to format: AVAudioFormat
@@ -102,16 +105,25 @@ final class AudioCapture: AudioCapturing, AnalyzerAudioSource, @unchecked Sendab
         guard let out = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity) else {
             return nil
         }
+        // The SDK types the input block as `@Sendable`, but
+        // `convert(to:error:withInputFrom:)` invokes it synchronously on the
+        // calling thread — `Input` is never accessed concurrently, hence
+        // `@unchecked Sendable`.
+        nonisolated final class Input: @unchecked Sendable {
+            var consumed = false
+            let buffer: AVAudioPCMBuffer
+            init(_ buffer: AVAudioPCMBuffer) { self.buffer = buffer }
+        }
+        let input = Input(buffer)
         var error: NSError?
-        var consumed = false
         converter.convert(to: out, error: &error) { _, status in
-            if consumed {
+            if input.consumed {
                 status.pointee = .noDataNow
                 return nil
             }
-            consumed = true
+            input.consumed = true
             status.pointee = .haveData
-            return buffer
+            return input.buffer
         }
         return error == nil ? out : nil
     }

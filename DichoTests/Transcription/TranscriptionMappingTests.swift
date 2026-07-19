@@ -8,6 +8,7 @@ import Testing
 /// a pure helper extracting the minimum per-run confidence from an attributed
 /// transcription result. No live Speech calls — attributed strings are built
 /// by hand with the `SpeechAttributes.ConfidenceAttribute` key.
+@MainActor
 @Suite("Transcription mapping — alternatives + confidence plumbing (M10)")
 struct TranscriptionMappingTests {
 

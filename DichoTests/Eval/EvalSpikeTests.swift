@@ -161,16 +161,23 @@ struct EvalSpikeTests {
             Double(sourceBuffer.frameLength) * format.sampleRate / sourceFormat.sampleRate
         ) + 1024
         let converted = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity))
-        var consumed = false
+        // The SDK types the input block as `@Sendable`, but it is invoked
+        // synchronously inside `convert` on this thread — no concurrent access.
+        final class Input: @unchecked Sendable {
+            var consumed = false
+            let buffer: AVAudioPCMBuffer
+            init(_ buffer: AVAudioPCMBuffer) { self.buffer = buffer }
+        }
+        let input = Input(sourceBuffer)
         var conversionError: NSError?
         converter.convert(to: converted, error: &conversionError) { _, status in
-            if consumed {
+            if input.consumed {
                 status.pointee = .endOfStream
                 return nil
             }
-            consumed = true
+            input.consumed = true
             status.pointee = .haveData
-            return sourceBuffer
+            return input.buffer
         }
         try #require(conversionError == nil, "AVAudioConverter failed: \(String(describing: conversionError))")
         return converted

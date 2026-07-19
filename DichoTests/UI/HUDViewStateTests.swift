@@ -4,6 +4,7 @@ import Testing
 /// Pure mapping from coordinator state + settings to the HUD's render phase
 /// (M11). No SwiftUI, no coordinator — just the value-level decisions that
 /// decide what the card shows.
+@MainActor
 @Suite("HUDView.phase — coordinator/settings → render phase (M11)")
 struct HUDViewStateTests {
 

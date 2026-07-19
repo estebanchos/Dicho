@@ -4,6 +4,7 @@ import Testing
 
 /// Pure geometry for the M11 HUD placement (TASKS.md 11.2): top-center within
 /// the active screen's visible frame. No NSScreen / NSPanel — plain rect math.
+@MainActor
 @Suite("HUDLayout — top-center placement (M11)")
 struct HUDLayoutTests {
 
