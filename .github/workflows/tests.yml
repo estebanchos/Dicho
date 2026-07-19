@@ -1,0 +1,42 @@
+name: Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# macOS minutes bill at 10x on private repos — cancel superseded runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Pinned image, NOT macos-latest: the suite needs Xcode >= 26.5 (project
+    # SDK floor) and the macos-26 arm64 image ships it as the default.
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      # No dependency-install steps: the project has zero SPM/third-party deps.
+      #
+      # CODE_SIGN_IDENTITY=- : ad-hoc signing — the runner has no certificate.
+      #
+      # MACOSX_DEPLOYMENT_TARGET=26.4 is a CI-ONLY override (developer decision
+      # 2026-07-19): the macos-26 image runs macOS 26.4, below the project's
+      # 26.5 deployment target, so 26.5-min test products cannot launch on it.
+      # The project file keeps 26.5. REMOVE this override once
+      # actions/runner-images ships macOS >= 26.5 on macos-26.
+      #
+      # The env-gated eval suites (EvalRun, AsrABRun, EvalSpikeTests) must stay
+      # skipped: they need local-only recorded audio (gitignored) and live
+      # on-device models. Do NOT set TEST_RUNNER_DICHO_EVAL or DICHO_ASR_AB.
+      - name: Run tests
+        run: |
+          xcodebuild test -scheme Dicho \
+            -destination 'platform=macOS,arch=arm64' \
+            CODE_SIGN_IDENTITY=- \
+            MACOSX_DEPLOYMENT_TARGET=26.4 \
+            -parallel-testing-enabled NO
