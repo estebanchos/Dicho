@@ -74,10 +74,12 @@ There are no third-party dependencies and no package resolution step.
 
 ### Download
 
-A notarized, Developer ID-signed build for direct download is coming soon. Dicho
-ships outside the Mac App Store because the sandbox prohibits the global event
-tap and synthetic paste the core loop depends on. Until the download is
-available, build from source using the steps above.
+Dicho is currently at **v0.2** and in **limited testing with friends and
+family**: a notarized, Developer ID-signed DMG is shared directly with testers,
+with a public download to come later. Dicho ships outside the Mac App Store
+because the sandbox prohibits the global event tap and synthetic paste the core
+loop depends on. In the meantime, anyone can build from source using the steps
+above.
 
 ### Permissions
 
